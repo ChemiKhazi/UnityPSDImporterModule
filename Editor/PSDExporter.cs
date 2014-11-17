@@ -276,9 +276,6 @@ namespace kontrabida.psdexport
 			string path = settings.GetLayerPath(layerName);
 
 			// Setup scaling variables
-			int width = tex.width;
-			int height = tex.height;
-			int mipLevel = 0;
 			float pixelsToUnits = settings.PixelsToUnitSize;
 
 			// Global settings scaling
@@ -291,8 +288,12 @@ namespace kontrabida.psdexport
 			if (layerSetting.scaleBy != ScaleDown.Default)
 			{
 				int scaleLevel = 1;
+				pixelsToUnits = Mathf.RoundToInt(settings.PixelsToUnitSize/2f);
 				if (layerSetting.scaleBy == ScaleDown.Quarter)
+				{
 					scaleLevel = 2;
+					pixelsToUnits = Mathf.RoundToInt(settings.PixelsToUnitSize/4f);
+				}
 				tex = ScaleTextureByMipmap(tex, scaleLevel);
 			}
 

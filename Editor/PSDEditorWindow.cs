@@ -164,7 +164,7 @@ namespace kontrabida.psdexport
 
 				DrawExportEntry();
 
-				//DrawSpriteEntry();
+				DrawSpriteEntry();
 			}
 			else
 			{
@@ -449,6 +449,8 @@ namespace kontrabida.psdexport
 
 				// Get the pivot settings for the sprite
 				TextureImporter spriteSettings = (TextureImporter)AssetImporter.GetAtPath(path);
+				TextureImporterSettings sprImport = new TextureImporterSettings();
+				spriteSettings.ReadTextureSettings(sprImport);
 
 				GameObject go = new GameObject(layer.Name);
 				SpriteRenderer sr = go.AddComponent<SpriteRenderer>();
@@ -460,8 +462,40 @@ namespace kontrabida.psdexport
 				}
 
 				Vector3 goPos = Vector3.zero;
-				goPos.x = ((layer.Rect.width * spriteSettings.spritePivot.x) + layer.Rect.x) / settings.PixelsToUnitSize;
-				goPos.y = (-(layer.Rect.height * (1 - spriteSettings.spritePivot.y)) - layer.Rect.y) / settings.PixelsToUnitSize;
+				Vector2 sprPivot = new Vector2(0.5f, 0.5f);
+				if (sprImport.spriteAlignment == (int) SpriteAlignment.Custom)
+				{
+					sprPivot = sprImport.spritePivot;
+				}
+				if (sprImport.spriteAlignment == (int)SpriteAlignment.TopLeft ||
+					sprImport.spriteAlignment == (int)SpriteAlignment.LeftCenter ||
+					sprImport.spriteAlignment == (int)SpriteAlignment.BottomLeft)
+				{
+					sprPivot.x = 0f;
+				}
+				if (sprImport.spriteAlignment == (int)SpriteAlignment.TopRight ||
+					sprImport.spriteAlignment == (int)SpriteAlignment.RightCenter||
+					sprImport.spriteAlignment == (int)SpriteAlignment.BottomRight)
+				{
+					sprPivot.x = 1;
+				}
+				if (sprImport.spriteAlignment == (int) SpriteAlignment.TopLeft ||
+				    sprImport.spriteAlignment == (int) SpriteAlignment.TopCenter ||
+				    sprImport.spriteAlignment == (int) SpriteAlignment.TopRight)
+				{
+					sprPivot.y = 1;
+				}
+				if (sprImport.spriteAlignment == (int)SpriteAlignment.BottomLeft ||
+					sprImport.spriteAlignment == (int)SpriteAlignment.BottomCenter ||
+					sprImport.spriteAlignment == (int)SpriteAlignment.BottomRight)
+				{
+					sprPivot.y = 0;
+				}
+
+				goPos.x = ((layer.Rect.width*sprPivot.x) + layer.Rect.x);
+				goPos.x /= settings.PixelsToUnitSize;
+				goPos.y = (-(layer.Rect.height * (1 - sprPivot.y)) - layer.Rect.y);
+				goPos.y /= settings.PixelsToUnitSize;
 				goPos.x *= posScale;
 				goPos.y *= posScale;
 

@@ -284,45 +284,16 @@ namespace kontrabida.psdexport
 			// Global settings scaling
 			if (settings.ScaleBy > 0)
 			{
-				width = Mathf.RoundToInt(tex.width / 2);
-				height = Mathf.RoundToInt(tex.height / 2);
-				mipLevel = 1;
-				if (settings.ScaleBy == 2)
-				{
-					width = Mathf.RoundToInt(tex.width / 4);
-					height = Mathf.RoundToInt(tex.height / 4);
-					mipLevel = 2;
-				}
-				// Scaling by abusing mip maps
-				Texture2D resized = new Texture2D(width, height);
-				resized.SetPixels32(tex.GetPixels32(mipLevel));
-				resized.Apply();
-				tex = resized;
+				tex = ScaleTextureByMipmap(tex, settings.ScaleBy);
 			}
 
 			// Then scale by layer scale
 			if (layerSetting.scaleBy != ScaleDown.Default)
 			{
-				mipLevel = 0;
-				if (layerSetting.scaleBy == ScaleDown.Half)
-				{
-					mipLevel += 1;
-					width = Mathf.RoundToInt(tex.width / 2);
-					height = Mathf.RoundToInt(tex.height / 2);
-					pixelsToUnits = settings.PixelsToUnitSize / 2f;
-				}
-				else if (layerSetting.scaleBy == ScaleDown.Quarter)
-				{
-					mipLevel += 2;
-					width = Mathf.RoundToInt(tex.width / 4);
-					height = Mathf.RoundToInt(tex.height / 4);
-					pixelsToUnits = settings.PixelsToUnitSize / 4f;
-				}
-				// Scaling by abusing mip maps
-				Texture2D resized = new Texture2D(width, height);
-				resized.SetPixels32(tex.GetPixels32(mipLevel));
-				resized.Apply();
-				tex = resized;
+				int scaleLevel = 1;
+				if (layerSetting.scaleBy == ScaleDown.Quarter)
+					scaleLevel = 2;
+				tex = ScaleTextureByMipmap(tex, scaleLevel);
 			}
 
 			byte[] buf = tex.EncodeToPNG();
@@ -368,20 +339,7 @@ namespace kontrabida.psdexport
 
 			if (settings.ScaleBy > 0)
 			{
-				int width = Mathf.RoundToInt(tex.width / 2);
-				int height = Mathf.RoundToInt(tex.height / 2);
-				int mipLevel = 1;
-				if (settings.ScaleBy == 2)
-				{
-					width = Mathf.RoundToInt(tex.width / 4);
-					height = Mathf.RoundToInt(tex.height / 4);
-					mipLevel = 2;
-				}
-				// Scaling by abusing mip maps
-				Texture2D resized = new Texture2D(width, height);
-				resized.SetPixels32(tex.GetPixels32(mipLevel));
-				resized.Apply();
-				tex = resized;
+				tex = ScaleTextureByMipmap(tex, settings.ScaleBy);
 			}
 
 			byte[] buf = tex.EncodeToPNG();
@@ -412,6 +370,20 @@ namespace kontrabida.psdexport
 			AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
 
 			return (Sprite)AssetDatabase.LoadAssetAtPath(path, typeof(Sprite));
+		}
+
+		private static Texture2D ScaleTextureByMipmap(Texture2D tex, int mipLevel)
+		{
+			if (mipLevel < 0 || mipLevel > 2)
+				return null;
+			int width = Mathf.RoundToInt(tex.width / (mipLevel * 2));
+			int height = Mathf.RoundToInt(tex.height / (mipLevel * 2));
+
+			// Scaling down by abusing mip maps
+			Texture2D resized = new Texture2D(width, height);
+			resized.SetPixels32(tex.GetPixels32(mipLevel));
+			resized.Apply();
+			return resized;
 		}
 	}
 }

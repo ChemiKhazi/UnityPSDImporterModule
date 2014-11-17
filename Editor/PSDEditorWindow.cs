@@ -23,14 +23,15 @@ THE SOFTWARE.
 */
 
 using System;
+using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using PhotoshopFile;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
-using PivotPos = kontrabida.psdexport.PSDExporter.PivotPos;
 
 namespace kontrabida.psdexport
 {
@@ -77,7 +78,7 @@ namespace kontrabida.psdexport
 
 		private Vector2 scrollPos = Vector2.zero;
 
-		private PSDExporter.PivotPos createPivot;
+		private SpriteAlignment createPivot;
 		private bool createAtSelection = false;
 		private int createSortLayer = 0;
 
@@ -122,6 +123,7 @@ namespace kontrabida.psdexport
 			{
 				// Parse the layer info
 				fileInfo = new PsdFileInfo(settings.Psd);
+				settings.LoadLayers(fileInfo);
 			}
 			return valid;
 		}
@@ -156,13 +158,13 @@ namespace kontrabida.psdexport
 			if (changed)
 				Image = img;
 
-			if (settings.Psd != null)
+			if (image != null && settings.Psd != null)
 			{
 				DrawPsdLayers();
 
 				DrawExportEntry();
 
-				DrawSpriteEntry();
+				//DrawSpriteEntry();
 			}
 			else
 			{
@@ -181,8 +183,8 @@ namespace kontrabida.psdexport
 				EditorGUILayout.HelpBox("Pixels To Unit Size should be greater than 0.", MessageType.Warning);
 			}
 
-			settings.Pivot = (PSDExporter.PivotPos)EditorGUILayout.EnumPopup("Pivot", settings.Pivot);
-			if (settings.Pivot == PSDExporter.PivotPos.Custom)
+			settings.Pivot = (SpriteAlignment)EditorGUILayout.EnumPopup("Pivot", settings.Pivot);
+			if (settings.Pivot == SpriteAlignment.Custom)
 			{
 				settings.PivotVector = EditorGUILayout.Vector2Field("Custom Pivot", settings.PivotVector);
 			}
@@ -197,7 +199,7 @@ namespace kontrabida.psdexport
 		{
 			GUILayout.Label("Sprite Creation", styleHeader);
 
-			createPivot = (PSDExporter.PivotPos)EditorGUILayout.EnumPopup("Create Pivot", createPivot);
+			createPivot = (SpriteAlignment) EditorGUILayout.EnumPopup("Create Pivot", createPivot);
 
 			if (_sortingLayerNames != null)
 				createSortLayer = EditorGUILayout.Popup("Sorting Layer", createSortLayer, _sortingLayerNames);
@@ -218,16 +220,29 @@ namespace kontrabida.psdexport
 		private void DrawPsdLayers()
 		{
 			EditorGUILayout.LabelField("Layers", styleHeader);
+			// Headers
+			EditorGUILayout.BeginHorizontal();
+			GUILayout.Space(30f);
+			GUILayout.Label("Name");
+			GUILayout.Label("Size", GUILayout.MaxWidth(70f));
+			GUILayout.Label("Pivot", GUILayout.MaxWidth(70f));
+			EditorGUILayout.EndHorizontal();
 
 			scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 
 			int indentLevel = 0;
 
 			PsdFile psd = settings.Psd;
+			// Loop backwards through the layers to display them in the expected order
 			for (int i = psd.Layers.Count - 1; i >= 0; i--)
 			{
 				Layer layer = psd.Layers[i];
+				// Layer set seems to appear in the photoshop layers
+				// no idea what it does but doesn't seem to be relevant
+				if (layer.Name == "</Layer set>")
+					continue;
 
+				// Try to get the group of this layer
 				var groupInfo = fileInfo.GetGroupByLayerIndex(i);
 				bool inGroup = groupInfo != null;
 
@@ -240,54 +255,30 @@ namespace kontrabida.psdexport
 					startGroup = groupInfo.end == i;
 				}
 
-				// If entering a layer group, indent
+				// If exiting a layer group, unindent and continue to next layer
 				if (closeGroup)
 				{
 					indentLevel--;
 					continue;
 				}
 
+				// If layer group content...
 				if (inGroup && !startGroup)
 				{
 					// Skip contents if group folder closed
 					if (!groupInfo.opened)
 						continue;
+					// If not visible, disable the row
 					if (!groupInfo.visible)
 						GUI.enabled = false;
 				}
 
-				if (layer.Name != "</Layer set>")
-				{
-					EditorGUILayout.BeginHorizontal();
+				if (startGroup)
+					DrawLayerGroupStart(groupInfo, i, indentLevel);
+				else
+					DrawLayerEntry(layer, i, indentLevel);
 
-					bool visToggle = true;
-					if (startGroup)
-						visToggle = groupInfo.visible;
-					else
-						visToggle = fileInfo.LayerVisibility[i];
-
-					// Draw layer visibility toggle
-					visToggle = EditorGUILayout.Toggle(visToggle, GUILayout.MaxWidth(15f));
-					GUILayout.Space(indentLevel * 20f);
-
-					if (startGroup)
-					{
-						// Draw the layer group name
-						groupInfo.opened = EditorGUILayout.Foldout(groupInfo.opened, layer.Name);
-						groupInfo.visible = visToggle;
-						fileInfo.LayerVisibility[i] = visToggle;
-					}
-					else
-					{
-						// Draw the layer name
-						GUILayout.Label(layer.Name, styleLabelLeft);
-						fileInfo.LayerVisibility[i] = visToggle;
-					}
-
-					EditorGUILayout.EndHorizontal();
-				}
-
-				// If close group, just continue to the next layer
+				// If start of group, indent
 				if (startGroup)
 				{
 					indentLevel++;
@@ -296,6 +287,56 @@ namespace kontrabida.psdexport
 				GUI.enabled = true;
 			} // End layer loop
 			EditorGUILayout.EndScrollView();
+		}
+
+		private bool DrawLayerEntry(Layer layer, int layerIndex, int indentLevel)
+		{
+			EditorGUILayout.BeginHorizontal();
+
+			bool visToggle = fileInfo.LayerVisibility[layerIndex];
+
+			// Draw layer visibility toggle
+			visToggle = EditorGUILayout.Toggle(visToggle, GUILayout.MaxWidth(15f));
+			GUILayout.Space(indentLevel * 20f);
+
+			// Draw the layer name
+			GUILayout.Label(layer.Name, styleLabelLeft);
+			fileInfo.LayerVisibility[layerIndex] = visToggle;
+
+			// If layer visible, show layer export settings
+			var layerSetting = settings.layerSettings[layerIndex];
+			layerSetting.doExport = visToggle;
+			if (visToggle)
+			{
+				layerSetting.scaleBy = (PSDExporter.ScaleDown) EditorGUILayout
+										.EnumPopup(layerSetting.scaleBy,GUILayout.MaxWidth(70f));
+				layerSetting.pivot = (SpriteAlignment) EditorGUILayout
+										.EnumPopup(layerSetting.pivot, GUILayout.MaxWidth(70f));
+				settings.layerSettings[layerIndex] = layerSetting;
+			}
+
+			EditorGUILayout.EndHorizontal();
+			return visToggle;
+		}
+
+		private bool DrawLayerGroupStart(PSDLayerGroupInfo groupInfo,
+										int layerIndex, int indentLevel)
+		{
+			EditorGUILayout.BeginHorizontal();
+
+			bool visToggle = groupInfo.visible;
+			// Draw layer visibility toggle
+			visToggle = EditorGUILayout.Toggle(visToggle, GUILayout.MaxWidth(15f));
+			GUILayout.Space(indentLevel * 20f);
+
+			// Draw the layer group name
+			groupInfo.opened = EditorGUILayout.Foldout(groupInfo.opened, groupInfo.name);
+			groupInfo.visible = visToggle;
+			fileInfo.LayerVisibility[layerIndex] = visToggle;
+
+			EditorGUILayout.EndHorizontal();
+
+			return visToggle;
 		}
 
 		private void ExportLayers()
@@ -323,24 +364,40 @@ namespace kontrabida.psdexport
 
 			// Create the offset vector
 			Vector3 createOffset = Vector3.zero;
-			if (createPivot != PivotPos.TopLeft)
+			if (createPivot != SpriteAlignment.TopLeft)
 			{
 				Vector2 docSize = new Vector2(settings.Psd.ColumnCount, settings.Psd.RowCount);
 				docSize *= posScale;
 
-				if (createPivot == PivotPos.Center || createPivot == PivotPos.Left || createPivot == PivotPos.Right)
+				if (createPivot == SpriteAlignment.Center ||
+				    createPivot == SpriteAlignment.LeftCenter ||
+				    createPivot == SpriteAlignment.RightCenter)
+				{
 					createOffset.y = (docSize.y / 2) / settings.PixelsToUnitSize;
-				if (createPivot == PivotPos.Bottom || createPivot == PivotPos.BottomLeft || createPivot == PivotPos.BottomRight)
+				}
+				if (createPivot == SpriteAlignment.BottomCenter ||
+					createPivot == SpriteAlignment.BottomLeft ||
+					createPivot == SpriteAlignment.BottomRight)
+				{
 					createOffset.y = docSize.y / settings.PixelsToUnitSize;
+				}
 
-				if (createPivot == PivotPos.Center || createPivot == PivotPos.Top || createPivot == PivotPos.Bottom)
+				if (createPivot == SpriteAlignment.Center ||
+					createPivot == SpriteAlignment.TopCenter ||
+					createPivot == SpriteAlignment.BottomCenter)
+				{
 					createOffset.x = -(docSize.x / 2) / settings.PixelsToUnitSize;
-				if (createPivot == PivotPos.Right || createPivot == PivotPos.TopRight || createPivot == PivotPos.BottomRight)
+				}
+				if (createPivot == SpriteAlignment.RightCenter ||
+					createPivot == SpriteAlignment.TopRight ||
+					createPivot == SpriteAlignment.BottomRight)
+				{
 					createOffset.x = -(docSize.x) / settings.PixelsToUnitSize;
+				}
 			}
 
 			// Loop through the layers
-			Dictionary<LayerGroupInfo, GameObject> groupHeaders = new Dictionary<LayerGroupInfo, GameObject>();
+			Dictionary<PSDLayerGroupInfo, GameObject> groupHeaders = new Dictionary<PSDLayerGroupInfo, GameObject>();
 			GameObject lastParent = root;
 			for (int i = settings.Psd.Layers.Count - 1; i >= 0; i--)
 			{

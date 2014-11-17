@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using PhotoshopFile;
 using UnityEngine;
 using UnityEditor;
@@ -10,7 +8,9 @@ using Object = UnityEngine.Object;
 
 namespace kontrabida.psdexport
 {
-
+	/// <summary>
+	/// Stores preparsed information about the layers in a PSD file
+	/// </summary>
 	public class PsdFileInfo
 	{
 		public class InstancedLayerInfo
@@ -19,18 +19,25 @@ namespace kontrabida.psdexport
 			public List<int> duplicateLayers;
 		}
 
-		public LayerGroupInfo[] LayerGroups { get; protected set; }
+		public PSDLayerGroupInfo[] LayerGroups { get; protected set; }
 
 		/// <summary>
 		/// Layer visibility data, indexed by layer
 		/// </summary>
 		public bool[] LayerVisibility { get; protected set; }
+		/// <summary>
+		/// A list of layer index that are regular PS layers
+		/// </summary>
+		public int[] LayerIndices { get; protected set; }
 
 		public PsdFileInfo(PsdFile psd)
 		{
-			List<LayerGroupInfo> layerGroups = new List<LayerGroupInfo>();
-			List<LayerGroupInfo> openGroupStack = new List<LayerGroupInfo>();
+			List<int> layerIndices = new List<int>();
+			List<PSDLayerGroupInfo> layerGroups = new List<PSDLayerGroupInfo>();
+			List<PSDLayerGroupInfo> openGroupStack = new List<PSDLayerGroupInfo>();
 			List<bool> layerVisibility = new List<bool>();
+			// Reverse loop through layers to get the layers in the
+			// same way they are displayed in Photoshop
 			for (int i = psd.Layers.Count - 1; i >= 0; i--)
 			{
 				Layer layer = psd.Layers[i];
@@ -41,6 +48,7 @@ namespace kontrabida.psdexport
 				var secInfo = layer.AdditionalInfo
 									.Where(info => info.GetType() == typeof(LayerSectionInfo))
 									.ToArray();
+				// Section info is basically layer group info
 				bool isOpen = false;
 				bool isGroup = false;
 				bool closeGroup = false;
@@ -59,12 +67,13 @@ namespace kontrabida.psdexport
 
 				if (isGroup)
 				{
-					// Open a new layer group info
-					openGroupStack.Add(new LayerGroupInfo(layer.Name, i, layer.Visible, isOpen));
+					// Open a new layer group info, because we're iterating
+					// through layers backwards, this layer number is the last logical layer
+					openGroupStack.Add(new PSDLayerGroupInfo(layer.Name, i, layer.Visible, isOpen));
 				}
 				else if (closeGroup)
 				{
-					// Set the end index of the latest LayerGroupInfo
+					// Set the start index of the last LayerGroupInfo
 					var closeInfo = openGroupStack.Last();
 					closeInfo.start = i;
 					// Add it to the layerGroup list
@@ -74,16 +83,20 @@ namespace kontrabida.psdexport
 				}
 				else
 				{
-					// Normal layer, look for instances	
+					// Normal layer
+					layerIndices.Add(i);
+					// look for instances	
 					if (layer.Name.Contains(" Copy"))
 					{
-
 					}
 				}
 			} // End layer loop
 
+			// Since loop was reversed...
 			layerVisibility.Reverse();
 			LayerVisibility = layerVisibility.ToArray();
+
+			LayerIndices = layerIndices.ToArray();
 
 			LayerGroups = layerGroups.ToArray();
 		}
@@ -93,9 +106,9 @@ namespace kontrabida.psdexport
 			return null;
 		}
 
-		public LayerGroupInfo GetGroupByLayerIndex(int layerIndex)
+		public PSDLayerGroupInfo GetGroupByLayerIndex(int layerIndex)
 		{
-			List<LayerGroupInfo> candidates = new List<LayerGroupInfo>();
+			List<PSDLayerGroupInfo> candidates = new List<PSDLayerGroupInfo>();
 			// Might be a nested layer group
 			foreach (var layerGroupInfo in LayerGroups)
 			{
@@ -105,20 +118,39 @@ namespace kontrabida.psdexport
 			return candidates.OrderBy(info => info.end - info.start).FirstOrDefault();
 		}
 
-		public LayerGroupInfo GetGroupByStartIndex(int startIndex)
+		public PSDLayerGroupInfo GetGroupByStartIndex(int startIndex)
 		{
 			return LayerGroups.FirstOrDefault(info => info.end == startIndex);
 		}
 	}
 
-	public class LayerGroupInfo
+	/// <summary>
+	/// Data on PSD layer groups
+	/// </summary>
+	public class PSDLayerGroupInfo
 	{
+		/// <summary>
+		/// Layer group name
+		/// </summary>
 		public string name;
-		public float scale;
-		public int end, start;
-		public bool visible, opened;
+		/// <summary>
+		/// The last layer number contained in this layer group
+		/// </summary>
+		public int end;
+		/// <summary>
+		/// The first layer number contained by this layer group
+		/// </summary>
+		public int start;
+		/// <summary>
+		/// If this layer group is visible
+		/// </summary>
+		public bool visible;
+		/// <summary>
+		/// If this layer group is expanded
+		/// </summary>
+		public bool opened;
 
-		public LayerGroupInfo(string name, int end, bool visible, bool opened)
+		public PSDLayerGroupInfo(string name, int end, bool visible, bool opened)
 		{
 			this.name = name;
 			this.end = end;
@@ -126,132 +158,11 @@ namespace kontrabida.psdexport
 			this.opened = opened;
 
 			start = -1;
-			scale = 1;
 		}
 
 		public bool ContainsLayer(int layerIndex)
 		{
 			return (layerIndex <= end) && (layerIndex >= start);
-		}
-	}
-
-	public class PsdExportSettings
-	{
-		public List<bool> exportFlags = new List<bool>();
-
-		public PsdFile Psd { get; protected set; }
-		public string Filename { get; protected set; }
-		public Texture2D Image { get; protected set; }
-
-		public float PixelsToUnitSize { get; set; }
-		public int ScaleBy { get; set; }
-		public Vector2 PivotVector { get; set; }
-
-		private PSDExporter.PivotPos _pivot;
-		public PSDExporter.PivotPos Pivot
-		{
-			get { return _pivot; }
-			set
-			{
-				_pivot = value;
-				if (_pivot == PSDExporter.PivotPos.Custom)
-					return;
-
-				Vector2 pivotCustom = new Vector2(0.5f, 0.5f);
-				if (_pivot == PSDExporter.PivotPos.Top || _pivot == PSDExporter.PivotPos.TopLeft || _pivot == PSDExporter.PivotPos.TopRight)
-					pivotCustom.y = 1;
-				if (_pivot == PSDExporter.PivotPos.Bottom || _pivot == PSDExporter.PivotPos.BottomLeft || _pivot == PSDExporter.PivotPos.BottomRight)
-					pivotCustom.y = 0f;
-
-				if (_pivot == PSDExporter.PivotPos.Left || _pivot == PSDExporter.PivotPos.TopLeft || _pivot == PSDExporter.PivotPos.BottomLeft)
-					pivotCustom.x = 0f;
-				if (_pivot == PSDExporter.PivotPos.Right || _pivot == PSDExporter.PivotPos.TopRight || _pivot == PSDExporter.PivotPos.BottomRight)
-					pivotCustom.x = 1f;
-				PivotVector = pivotCustom;
-			}
-		}
-
-		public PsdExportSettings(Texture2D image)
-		{
-			string path = AssetDatabase.GetAssetPath(image);
-			if (!path.ToUpper().EndsWith(".PSD"))
-				return;
-
-			Psd = new PsdFile(path, Encoding.Default);
-			Filename = Path.GetFileNameWithoutExtension(path);
-			Image = image;
-
-			ScaleBy = 0;
-			Pivot = PSDExporter.PivotPos.Center;
-			PixelsToUnitSize = 100f;
-
-			LoadMetaData();
-		}
-
-		private void LoadMetaData()
-		{
-			string[] nameStrings = Enum.GetNames(typeof(PSDExporter.PivotPos));
-			Array nameVals = Enum.GetValues(typeof(PSDExporter.PivotPos));
-
-			string[] labels = AssetDatabase.GetLabels(Image);
-			foreach (var label in labels)
-			{
-				if (label.Equals("ImportX1"))
-					ScaleBy = 0;
-				if (label.Equals("ImportX2"))
-					ScaleBy = 1;
-				if (label.Equals("ImportX4"))
-					ScaleBy = 2;
-
-				if (label.StartsWith("ImportAnchor"))
-				{
-					string pivotType = label.Substring(12);
-					if (pivotType.StartsWith("Custom"))
-					{
-						//string values = pivotType.Substring(pivotType.IndexOf("["), pivotType.IndexOf("]"));
-						//string[] vals = values.Split(',');
-						//PivotVector = new Vector2(float.Parse(vals[0]), float.Parse(vals[1]));
-						Pivot = PSDExporter.PivotPos.Custom;
-					}
-					else
-					{
-						// Find by enum
-						for (int i = 0; i < nameStrings.Length; i++)
-						{
-							if (pivotType == nameStrings[i])
-								Pivot = (PSDExporter.PivotPos)nameVals.GetValue(i);
-						}
-					}
-				} // End import anchor if
-
-				if (label.StartsWith("ImportPTU|"))
-				{
-					string ptuVal = label.Substring(10);
-					PixelsToUnitSize = Single.Parse(ptuVal);
-				}
-			} // End label loop
-		}
-
-		public void SaveMetaData()
-		{
-			string[] labels = new string[3];
-
-			if (ScaleBy == 0)
-				labels[0] = "ImportX1";
-			if (ScaleBy == 1)
-				labels[0] = "ImportX2";
-			if (ScaleBy == 2)
-				labels[0] = "ImportX4";
-
-			labels[1] = "ImportAnchor" + Pivot.ToString();
-			if (Pivot == PSDExporter.PivotPos.Custom)
-			{
-				labels[1] = "ImportAnchorCustom[" + PivotVector.x + "," + PivotVector.y + "]";
-			}
-
-			labels[2] = "ImportPTU|" + PixelsToUnitSize;
-
-			AssetDatabase.SetLabels(Image, labels);
 		}
 	}
 
@@ -271,21 +182,40 @@ namespace kontrabida.psdexport
 			Custom
 		}
 
+		public enum ScaleDown
+		{
+			Default,
+			Half,
+			Quarter
+		}
+
 		public static void Export(PsdExportSettings settings, PsdFileInfo fileInfo)
 		{
-			for (int i = 0; i < settings.Psd.Layers.Count; i++)
+			foreach (var keypair in settings.layerSettings)
 			{
-				var groupInfo = fileInfo.GetGroupByLayerIndex(i);
+				PsdExportSettings.LayerSetting layerSetting = keypair.Value;
+				// Don't export if not set to export or group is off
+				if (!layerSetting.doExport)
+					continue;
+				var groupInfo = fileInfo.GetGroupByLayerIndex(layerSetting.layerIndex);
 				if (groupInfo != null && !groupInfo.visible)
 					continue;
 
-				if (!fileInfo.LayerVisibility[i])
-					continue;
-					
-				var layer = settings.Psd.Layers[i];
-				CreateSprite(settings, layer);
+				CreateSprite(settings, layerSetting.layerIndex);
 			}
 			settings.SaveMetaData();
+			settings.SaveLayerMetaData();
+		}
+
+		public static Sprite CreateSprite(PsdExportSettings settings, int layerIndex)
+		{
+			var layer = settings.Psd.Layers[layerIndex];
+			Texture2D tex = CreateTexture(layer);
+			if (tex == null)
+				return null;
+			Sprite sprite = SaveAsset(settings, tex, layerIndex);
+			Object.DestroyImmediate(tex);
+			return sprite;
 		}
 
 		public static Sprite CreateSprite(PsdExportSettings settings, Layer layer)
@@ -293,7 +223,7 @@ namespace kontrabida.psdexport
 			Texture2D tex = CreateTexture(layer);
 			if (tex == null)
 				return null;
-			Sprite sprite = SaveAsset(settings, tex, "_" + layer.Name);
+			Sprite sprite = SaveAsset(settings, tex, layer.Name);
 			Object.DestroyImmediate(tex);
 			return sprite;
 		}
@@ -339,11 +269,102 @@ namespace kontrabida.psdexport
 			return tex;
 		}
 
-		private static Sprite SaveAsset(PsdExportSettings settings, Texture2D tex, string suffix)
+		private static Sprite SaveAsset(PsdExportSettings settings, Texture2D tex, int layer)
 		{
-			string assetPath = AssetDatabase.GetAssetPath(settings.Image);
-			string path = Path.Combine(Path.GetDirectoryName(assetPath),
-				Path.GetFileNameWithoutExtension(assetPath) + suffix + ".png");
+			PsdExportSettings.LayerSetting layerSetting = settings.layerSettings[layer];
+			string layerName = settings.Psd.Layers[layer].Name;
+			string path = settings.GetLayerPath(layerName);
+
+			// Setup scaling variables
+			int width = tex.width;
+			int height = tex.height;
+			int mipLevel = 0;
+			float pixelsToUnits = settings.PixelsToUnitSize;
+
+			// Global settings scaling
+			if (settings.ScaleBy > 0)
+			{
+				width = Mathf.RoundToInt(tex.width / 2);
+				height = Mathf.RoundToInt(tex.height / 2);
+				mipLevel = 1;
+				if (settings.ScaleBy == 2)
+				{
+					width = Mathf.RoundToInt(tex.width / 4);
+					height = Mathf.RoundToInt(tex.height / 4);
+					mipLevel = 2;
+				}
+				// Scaling by abusing mip maps
+				Texture2D resized = new Texture2D(width, height);
+				resized.SetPixels32(tex.GetPixels32(mipLevel));
+				resized.Apply();
+				tex = resized;
+			}
+
+			// Then scale by layer scale
+			if (layerSetting.scaleBy != ScaleDown.Default)
+			{
+				mipLevel = 0;
+				if (layerSetting.scaleBy == ScaleDown.Half)
+				{
+					mipLevel += 1;
+					width = Mathf.RoundToInt(tex.width / 2);
+					height = Mathf.RoundToInt(tex.height / 2);
+					pixelsToUnits = settings.PixelsToUnitSize / 2f;
+				}
+				else if (layerSetting.scaleBy == ScaleDown.Quarter)
+				{
+					mipLevel += 2;
+					width = Mathf.RoundToInt(tex.width / 4);
+					height = Mathf.RoundToInt(tex.height / 4);
+					pixelsToUnits = settings.PixelsToUnitSize / 4f;
+				}
+				// Scaling by abusing mip maps
+				Texture2D resized = new Texture2D(width, height);
+				resized.SetPixels32(tex.GetPixels32(mipLevel));
+				resized.Apply();
+				tex = resized;
+			}
+
+			byte[] buf = tex.EncodeToPNG();
+			File.WriteAllBytes(path, buf);
+			AssetDatabase.Refresh();
+
+			// Load the texture so we can change the type
+			var textureObj = AssetDatabase.LoadAssetAtPath(path, typeof(Texture2D));
+
+			// Get the texture importer for the asset
+			TextureImporter textureImporter = (TextureImporter)AssetImporter.GetAtPath(path);
+			// Read out the texture import settings so import pivot point can be changed
+			TextureImporterSettings importSetting = new TextureImporterSettings();
+			textureImporter.ReadTextureSettings(importSetting);
+
+			// Set the pivot import setting
+			importSetting.spriteAlignment = (int) settings.Pivot;
+			// But if layer setting has a different pivot, set as new pivot
+			if (settings.Pivot != layerSetting.pivot)
+				importSetting.spriteAlignment = (int)layerSetting.pivot;
+			// Pivot settings are the same but custom, set the vector
+			else if (settings.Pivot == SpriteAlignment.Custom)
+				importSetting.spritePivot = settings.PivotVector;
+
+			importSetting.spritePixelsToUnits = pixelsToUnits;
+			// Set the rest of the texture settings
+			textureImporter.textureType = TextureImporterType.Sprite;
+			textureImporter.spriteImportMode = SpriteImportMode.Single;
+			// Write in the texture import settings
+			textureImporter.SetTextureSettings(importSetting);
+
+			EditorUtility.SetDirty(textureObj);
+			AssetDatabase.WriteImportSettingsIfDirty(path);
+			AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+
+			return (Sprite)AssetDatabase.LoadAssetAtPath(path, typeof(Sprite));
+		}
+
+		private static Sprite SaveAsset(PsdExportSettings settings,
+										Texture2D tex, string layername)
+		{
+			string path = settings.GetLayerPath(layername);
 
 			if (settings.ScaleBy > 0)
 			{
@@ -369,12 +390,23 @@ namespace kontrabida.psdexport
 
 			// Load the texture so we can change the type
 			var textureObj = AssetDatabase.LoadAssetAtPath(path, typeof(Texture2D));
-			TextureImporter textureImporter = (TextureImporter)AssetImporter.GetAtPath(path);
 
+			// Get the texture importer for the asset
+			TextureImporter textureImporter = (TextureImporter)AssetImporter.GetAtPath(path);
+			// Read out the texture import settings so import pivot point can be changed
+			TextureImporterSettings importSetting = new TextureImporterSettings();
+			textureImporter.ReadTextureSettings(importSetting);
+
+			// Set the pivot import setting
+			importSetting.spriteAlignment = (int) SpriteAlignment.Custom;
+			// Set the rest of the texture settings
 			textureImporter.textureType = TextureImporterType.Sprite;
 			textureImporter.spriteImportMode = SpriteImportMode.Single;
 			textureImporter.spritePivot = settings.PivotVector;
 			textureImporter.spritePixelsToUnits = settings.PixelsToUnitSize;
+			// Write in the texture import settings
+			textureImporter.SetTextureSettings(importSetting);
+
 			EditorUtility.SetDirty(textureObj);
 			AssetDatabase.WriteImportSettingsIfDirty(path);
 			AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);

@@ -183,7 +183,26 @@ namespace kontrabida.psdexport
 				EditorGUILayout.HelpBox("Pixels To Unit Size should be greater than 0.", MessageType.Warning);
 			}
 
-			settings.Pivot = (SpriteAlignment)EditorGUILayout.EnumPopup("Pivot", settings.Pivot);
+			// Default pivot
+			var newPivot = (SpriteAlignment)EditorGUILayout.EnumPopup("Pivot", settings.Pivot);
+			// When pivot changed, change the other layer settings as well
+			if (newPivot != settings.Pivot)
+			{
+				List<int> changeLayers = new List<int>();
+				foreach (var layerKeyPair in settings.layerSettings)
+				{
+					if (layerKeyPair.Value.pivot == settings.Pivot)
+					{
+						changeLayers.Add(layerKeyPair.Value.layerIndex);
+					}
+				}
+				foreach (int changeLayer in changeLayers)
+				{
+					settings.layerSettings[changeLayer].pivot = newPivot;
+				}
+				settings.Pivot = newPivot;
+			}
+
 			if (settings.Pivot == SpriteAlignment.Custom)
 			{
 				settings.PivotVector = EditorGUILayout.Vector2Field("Custom Pivot", settings.PivotVector);

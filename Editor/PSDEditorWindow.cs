@@ -23,9 +23,7 @@ THE SOFTWARE.
 */
 
 using System;
-using System.Linq;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using PhotoshopFile;
 using System.Collections.Generic;
 using System.IO;

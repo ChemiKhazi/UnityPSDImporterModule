@@ -29,6 +29,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+using UnityEditorInternal;
 using Object = UnityEngine.Object;
 
 namespace kontrabida.psdexport
@@ -93,7 +94,6 @@ namespace kontrabida.psdexport
 			}
 		}
 
-
 		private static string[] _sortingLayerNames;
 
 		void OnEnable()
@@ -107,9 +107,9 @@ namespace kontrabida.psdexport
 		{
 			if (_sortingLayerNames == null)
 			{
-				var internalEditorUtilityType = Type.GetType("UnityEditorInternal.InternalEditorUtility, UnityEditor");
-				var sortingLayersProperty = internalEditorUtilityType.GetProperty("sortingLayerNames", BindingFlags.Static | BindingFlags.NonPublic);
-				_sortingLayerNames = sortingLayersProperty.GetValue(null, new object[0]) as string[];
+				Type internalEditorUtilityType = typeof(InternalEditorUtility);
+				PropertyInfo sortingLayersProperty = internalEditorUtilityType.GetProperty("sortingLayerNames", BindingFlags.Static | BindingFlags.NonPublic);
+				_sortingLayerNames = (string[]) sortingLayersProperty.GetValue(null, new object[0]);
 			}
 		}
 

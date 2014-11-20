@@ -218,16 +218,6 @@ namespace kontrabida.psdexport
 			return sprite;
 		}
 
-		public static Sprite CreateSprite(PsdExportSettings settings, Layer layer)
-		{
-			Texture2D tex = CreateTexture(layer);
-			if (tex == null)
-				return null;
-			Sprite sprite = SaveAsset(settings, tex, layer.Name);
-			Object.DestroyImmediate(tex);
-			return sprite;
-		}
-
 		private static Texture2D CreateTexture(Layer layer)
 		{
 			if ((int)layer.Rect.width == 0 || (int)layer.Rect.height == 0)
@@ -323,46 +313,7 @@ namespace kontrabida.psdexport
 			// Set the rest of the texture settings
 			textureImporter.textureType = TextureImporterType.Sprite;
 			textureImporter.spriteImportMode = SpriteImportMode.Single;
-			// Write in the texture import settings
-			textureImporter.SetTextureSettings(importSetting);
-
-			EditorUtility.SetDirty(textureObj);
-			AssetDatabase.WriteImportSettingsIfDirty(path);
-			AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
-
-			return (Sprite)AssetDatabase.LoadAssetAtPath(path, typeof(Sprite));
-		}
-
-		private static Sprite SaveAsset(PsdExportSettings settings,
-										Texture2D tex, string layername)
-		{
-			string path = settings.GetLayerPath(layername);
-
-			if (settings.ScaleBy > 0)
-			{
-				tex = ScaleTextureByMipmap(tex, settings.ScaleBy);
-			}
-
-			byte[] buf = tex.EncodeToPNG();
-			File.WriteAllBytes(path, buf);
-			AssetDatabase.Refresh();
-
-			// Load the texture so we can change the type
-			var textureObj = AssetDatabase.LoadAssetAtPath(path, typeof(Texture2D));
-
-			// Get the texture importer for the asset
-			TextureImporter textureImporter = (TextureImporter)AssetImporter.GetAtPath(path);
-			// Read out the texture import settings so import pivot point can be changed
-			TextureImporterSettings importSetting = new TextureImporterSettings();
-			textureImporter.ReadTextureSettings(importSetting);
-
-			// Set the pivot import setting
-			importSetting.spriteAlignment = (int) SpriteAlignment.Custom;
-			// Set the rest of the texture settings
-			textureImporter.textureType = TextureImporterType.Sprite;
-			textureImporter.spriteImportMode = SpriteImportMode.Single;
-			textureImporter.spritePivot = settings.PivotVector;
-			textureImporter.spritePixelsToUnits = settings.PixelsToUnitSize;
+			textureImporter.spritePackingTag = settings.PackingTag;
 			// Write in the texture import settings
 			textureImporter.SetTextureSettings(importSetting);
 

@@ -181,6 +181,8 @@ namespace kontrabida.psdexport
 				EditorGUILayout.HelpBox("Pixels To Unit Size should be greater than 0.", MessageType.Warning);
 			}
 
+			settings.PackingTag = EditorGUILayout.TextField("Packing Tag", settings.PackingTag);
+
 			// Default pivot
 			var newPivot = (SpriteAlignment)EditorGUILayout.EnumPopup("Pivot", settings.Pivot);
 			// When pivot changed, change the other layer settings as well
@@ -461,7 +463,7 @@ namespace kontrabida.psdexport
 				Sprite spr = (Sprite)AssetDatabase.LoadAssetAtPath(path, typeof(Sprite));
 				if (spr == null)
 				{
-					spr = PSDExporter.CreateSprite(settings, layer);
+					spr = PSDExporter.CreateSprite(settings, i);
 				}
 
 				// Get the pivot settings for the sprite

@@ -47,6 +47,10 @@ namespace kontrabida.psdexport
 		/// </summary>
 		public float PixelsToUnitSize { get; set; }
 		/// <summary>
+		/// The packing tag to assign to the exported sprites
+		/// </summary>
+		public string PackingTag { get; set; }
+		/// <summary>
 		/// The scale of the PSD file relative to exported sprites
 		/// </summary>
 		public int ScaleBy { get; set; }
@@ -155,12 +159,18 @@ namespace kontrabida.psdexport
 					string ptuVal = label.Substring(10);
 					PixelsToUnitSize = Single.Parse(ptuVal);
 				}
+
+				if (label.StartsWith("ImportPackTag|"))
+				{
+					string packTag = label.Substring(14);
+					PackingTag = packTag;
+				}
 			} // End label loop
 		}
 
 		public void SaveMetaData()
 		{
-			string[] labels = new string[3];
+			string[] labels = new string[4];
 
 			if (ScaleBy == 0)
 				labels[0] = "ImportX1";
@@ -176,7 +186,7 @@ namespace kontrabida.psdexport
 			}
 
 			labels[2] = "ImportPTU|" + PixelsToUnitSize;
-
+			labels[3] = "ImportPackTag|" + PackingTag;
 			AssetDatabase.SetLabels(Image, labels);
 		}
 

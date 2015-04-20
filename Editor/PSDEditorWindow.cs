@@ -249,7 +249,9 @@ namespace kontrabida.psdexport
 
 			scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 
-			int indentLevel = 0;
+			int groupDepth = 0;
+			int groupVisibleMask = 1;
+			int groupOpenMask = 1;
 
 			PsdFile psd = settings.Psd;
 			// Loop backwards through the layers to display them in the expected order
@@ -274,41 +276,69 @@ namespace kontrabida.psdexport
 					startGroup = groupInfo.end == i;
 				}
 
+				// If start of group, indent
+				if (startGroup)
+				{
+					groupDepth++;
+
+					// Save the mask info
+					groupVisibleMask |= ((groupInfo.visible ? 1 : 0) << groupDepth);
+					groupOpenMask |= ((groupInfo.opened ? 1 : 0) << groupDepth);
+				}
 				// If exiting a layer group, unindent and continue to next layer
 				if (closeGroup)
 				{
-					indentLevel--;
+					// Reset mask info when closing group
+					groupVisibleMask &= (0 << groupDepth);
+					groupOpenMask &= (0 << groupDepth);
+
+					groupDepth--;
 					continue;
 				}
 
+				bool parentVisible = true;
+
 				// If layer group content...
-				if (inGroup && !startGroup)
+				if (inGroup)
 				{
+					bool parentOpen = true;
+					parentVisible = true;
+
+					for (int parentMask = groupDepth - 1; parentMask > 0; parentMask--)
+					{
+						parentOpen &= (groupOpenMask & (1 << parentMask)) > 0;
+						parentVisible &= (groupVisibleMask & (1 << parentMask)) > 0;
+					}
+
+					bool skipLayer = !groupInfo.opened || !parentOpen;
+					bool disableLayer = !groupInfo.visible || !parentVisible;
+
+					if (startGroup)
+					{
+						skipLayer = !parentOpen;
+						disableLayer = !parentVisible;
+					}
+
 					// Skip contents if group folder closed
-					if (!groupInfo.opened)
+					if (skipLayer)
 						continue;
+
 					// If not visible, disable the row
-					if (!groupInfo.visible)
+					if (disableLayer)
 						GUI.enabled = false;
 				}
 
 				if (startGroup)
-					DrawLayerGroupStart(groupInfo, i, indentLevel);
+					DrawLayerGroupStart(groupInfo, i, groupDepth-1);
 				else
-					DrawLayerEntry(layer, i, indentLevel);
-
-				// If start of group, indent
-				if (startGroup)
-				{
-					indentLevel++;
-				}
+					DrawLayerEntry(layer, i, groupDepth, parentVisible);
 
 				GUI.enabled = true;
 			} // End layer loop
 			EditorGUILayout.EndScrollView();
 		}
 
-		private bool DrawLayerEntry(Layer layer, int layerIndex, int indentLevel)
+		private bool DrawLayerEntry(Layer layer, int layerIndex, int indentLevel, bool settingOverride)
 		{
 			EditorGUILayout.BeginHorizontal();
 
@@ -324,7 +354,7 @@ namespace kontrabida.psdexport
 
 			// If layer visible, show layer export settings
 			var layerSetting = settings.layerSettings[layerIndex];
-			layerSetting.doExport = visToggle;
+			layerSetting.doExport = visToggle && settingOverride;
 			if (visToggle)
 			{
 				layerSetting.scaleBy = (PSDExporter.ScaleDown) EditorGUILayout

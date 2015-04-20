@@ -209,9 +209,9 @@ namespace kontrabida.psdexport
 			int exportCount = 0;
 			foreach (var exportLayer in  exportLayers)
 			{
-				string infoString = string.Format("Exporting {0}/{1} Layers", exportCount, exportLayers.Count);
-
-				EditorUtility.DisplayProgressBar("Exporting PSD Layers", infoString, exportCount / (float) exportLayers.Count);
+				string infoString = string.Format("Exporting {0} / {1} Layers", exportCount, exportLayers.Count);
+				string fileString = string.Format("Exporting PSD Layers: {0}", settings.Filename);
+				EditorUtility.DisplayProgressBar(fileString, infoString, exportCount / (float) exportLayers.Count);
 				CreateSprite(settings, exportLayer);
 				exportCount++;
 			}
@@ -322,7 +322,7 @@ namespace kontrabida.psdexport
 			else if (settings.Pivot == SpriteAlignment.Custom)
 				importSetting.spritePivot = settings.PivotVector;
 
-			importSetting.spritePixelsToUnits = pixelsToUnits;
+			importSetting.spritePixelsPerUnit = pixelsToUnits;
 			// Set the rest of the texture settings
 			textureImporter.textureType = TextureImporterType.Sprite;
 			textureImporter.spriteImportMode = SpriteImportMode.Single;

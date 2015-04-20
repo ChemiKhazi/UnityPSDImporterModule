@@ -72,6 +72,8 @@ namespace kontrabida.psdexport
 
 		public bool AutoReExport { get; set; }
 
+		public bool HasMetaData { get; protected set; }
+
 		private SpriteAlignment _pivot;
 		public SpriteAlignment Pivot
 		{
@@ -135,6 +137,7 @@ namespace kontrabida.psdexport
 			string[] pivotNameStrings = Enum.GetNames(typeof(SpriteAlignment));
 			Array pivotNameVals = Enum.GetValues(typeof(SpriteAlignment));
 
+			HasMetaData = false;
 			string[] labels = AssetDatabase.GetLabels(Image);
 			foreach (var label in labels)
 			{
@@ -172,6 +175,7 @@ namespace kontrabida.psdexport
 				{
 					string ptuVal = label.Substring(TagImportPTU.Length);
 					PixelsToUnitSize = Single.Parse(ptuVal);
+					HasMetaData = true;
 				}
 
 				if (label.StartsWith(TagImportPack))
@@ -328,6 +332,7 @@ namespace kontrabida.psdexport
 			{
 				layerPath = Path.Combine("Assets/" + ExportPath, layerName + ".png");
 			}
+
 			return layerPath;
 		}
 	}

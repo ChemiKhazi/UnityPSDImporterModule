@@ -27,6 +27,7 @@ using System.Reflection;
 using PhotoshopFile;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEditorInternal;
@@ -102,13 +103,15 @@ namespace kontrabida.psdexport
 			{
 				Type internalEditorUtilityType = typeof(InternalEditorUtility);
 				PropertyInfo sortingLayersProperty = internalEditorUtilityType.GetProperty("sortingLayerNames", BindingFlags.Static | BindingFlags.NonPublic);
-				_sortingLayerNames = (string[]) sortingLayersProperty.GetValue(null, new object[0]);
+				_sortingLayerNames = (string[])sortingLayersProperty.GetValue(null, new object[0]);
 			}
 		}
 
 		private bool LoadImage()
 		{
 			settings = new PsdExportSettings(image);
+			showExportSettings = !settings.HasMetaData;
+
 			bool valid = (settings.Psd != null);
 			if (valid)
 			{
@@ -272,7 +275,7 @@ namespace kontrabida.psdexport
 				}
 
 				if (startGroup)
-					DrawLayerGroupStart(groupInfo, i, groupDepth-1);
+					DrawLayerGroupStart(groupInfo, i, groupDepth - 1);
 				else
 					DrawLayerEntry(layer, i, groupDepth, parentVisible);
 
@@ -300,9 +303,9 @@ namespace kontrabida.psdexport
 			layerSetting.doExport = visToggle && settingOverride;
 			if (layerSetting.doExport)
 			{
-				layerSetting.scaleBy = (PSDExporter.ScaleDown) EditorGUILayout
-										.EnumPopup(layerSetting.scaleBy,GUILayout.MaxWidth(70f));
-				layerSetting.pivot = (SpriteAlignment) EditorGUILayout
+				layerSetting.scaleBy = (PSDExporter.ScaleDown)EditorGUILayout
+										.EnumPopup(layerSetting.scaleBy, GUILayout.MaxWidth(70f));
+				layerSetting.pivot = (SpriteAlignment)EditorGUILayout
 										.EnumPopup(layerSetting.pivot, GUILayout.MaxWidth(70f));
 				settings.layerSettings[layerIndex] = layerSetting;
 			}
@@ -331,10 +334,20 @@ namespace kontrabida.psdexport
 			return visToggle;
 		}
 
+		private bool showExportSettings;
+
 		private void DrawExportEntry()
 		{
-			GUILayout.Label("Export Settings", styleHeader);
+			if (GUILayout.Button("Export Visible Layers", GUILayout.Height(40f)))
+				ExportLayers();
 
+			GUILayout.Space(10f);
+
+			showExportSettings = EditorGUILayout.Foldout(showExportSettings, "Export Settings", styleBoldFoldout);
+			if (!showExportSettings)
+				return;
+
+			GUILayout.Label("Source Image Scale");
 			settings.ScaleBy = GUILayout.Toolbar(settings.ScaleBy, new string[] { "1X", "2X", "4X" });
 
 			settings.AutoReExport = EditorGUILayout.Toggle("Auto Re-Export", settings.AutoReExport);
@@ -381,10 +394,8 @@ namespace kontrabida.psdexport
 			GUI.enabled = true;
 			EditorGUILayout.EndHorizontal();
 
-			if (GUILayout.Button("Export Visible Layers"))
-			{
-				ExportLayers();
-			}
+			if (GUILayout.Button("Save Export Settings"))
+				settings.SaveMetaData();
 		}
 
 		private void PickExportPath()
@@ -414,7 +425,7 @@ namespace kontrabida.psdexport
 			if (!showCreateSprites)
 				return;
 
-			createPivot = (SpriteAlignment) EditorGUILayout.EnumPopup("Create Pivot", createPivot);
+			createPivot = (SpriteAlignment)EditorGUILayout.EnumPopup("Create Pivot", createPivot);
 
 			if (_sortingLayerNames != null)
 				createSortLayer = EditorGUILayout.Popup("Sorting Layer", createSortLayer, _sortingLayerNames);
@@ -458,8 +469,8 @@ namespace kontrabida.psdexport
 				docSize *= posScale;
 
 				if (createPivot == SpriteAlignment.Center ||
-				    createPivot == SpriteAlignment.LeftCenter ||
-				    createPivot == SpriteAlignment.RightCenter)
+					createPivot == SpriteAlignment.LeftCenter ||
+					createPivot == SpriteAlignment.RightCenter)
 				{
 					createOffset.y = (docSize.y / 2) / settings.PixelsToUnitSize;
 				}
@@ -551,7 +562,7 @@ namespace kontrabida.psdexport
 
 				Vector3 goPos = Vector3.zero;
 				Vector2 sprPivot = new Vector2(0.5f, 0.5f);
-				if (sprImport.spriteAlignment == (int) SpriteAlignment.Custom)
+				if (sprImport.spriteAlignment == (int)SpriteAlignment.Custom)
 				{
 					sprPivot = sprImport.spritePivot;
 				}
@@ -562,14 +573,14 @@ namespace kontrabida.psdexport
 					sprPivot.x = 0f;
 				}
 				if (sprImport.spriteAlignment == (int)SpriteAlignment.TopRight ||
-					sprImport.spriteAlignment == (int)SpriteAlignment.RightCenter||
+					sprImport.spriteAlignment == (int)SpriteAlignment.RightCenter ||
 					sprImport.spriteAlignment == (int)SpriteAlignment.BottomRight)
 				{
 					sprPivot.x = 1;
 				}
-				if (sprImport.spriteAlignment == (int) SpriteAlignment.TopLeft ||
-				    sprImport.spriteAlignment == (int) SpriteAlignment.TopCenter ||
-				    sprImport.spriteAlignment == (int) SpriteAlignment.TopRight)
+				if (sprImport.spriteAlignment == (int)SpriteAlignment.TopLeft ||
+					sprImport.spriteAlignment == (int)SpriteAlignment.TopCenter ||
+					sprImport.spriteAlignment == (int)SpriteAlignment.TopRight)
 				{
 					sprPivot.y = 1;
 				}
@@ -580,7 +591,7 @@ namespace kontrabida.psdexport
 					sprPivot.y = 0;
 				}
 
-				goPos.x = ((layer.Rect.width*sprPivot.x) + layer.Rect.x);
+				goPos.x = ((layer.Rect.width * sprPivot.x) + layer.Rect.x);
 				goPos.x /= settings.PixelsToUnitSize;
 				goPos.y = (-(layer.Rect.height * (1 - sprPivot.y)) - layer.Rect.y);
 				goPos.y /= settings.PixelsToUnitSize;

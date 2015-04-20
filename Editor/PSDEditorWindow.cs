@@ -77,13 +77,13 @@ namespace kontrabida.psdexport
 
 		private Vector2 scrollPos = Vector2.zero;
 
+		private bool showCreateSprites;
 		private SpriteAlignment createPivot;
 		private bool createAtSelection = false;
 		private int createSortLayer = 0;
 
-		private GUIStyle styleHeader, styleLabelLeft;
-
 		private Texture2D image;
+
 		public Texture2D Image
 		{
 			get { return image; }
@@ -126,6 +126,9 @@ namespace kontrabida.psdexport
 			return valid;
 		}
 
+		#region GUI Styles
+		private GUIStyle styleHeader, styleLabelLeft, styleBoldFoldout;
+
 		void SetupStyles()
 		{
 			if (styleHeader == null)
@@ -144,7 +147,15 @@ namespace kontrabida.psdexport
 					padding = new RectOffset(0, 0, 0, 0)
 				};
 			}
+			if (styleBoldFoldout == null)
+			{
+				styleBoldFoldout = new GUIStyle(EditorStyles.foldout)
+				{
+					fontStyle = FontStyle.Bold
+				};
+			}
 		}
+		#endregion
 
 		public void OnGUI()
 		{
@@ -170,53 +181,12 @@ namespace kontrabida.psdexport
 			}
 		}
 
-		private void DrawExportEntry()
-		{
-			GUILayout.Label("Export Settings", styleHeader);
-
-			settings.ScaleBy = GUILayout.Toolbar(settings.ScaleBy, new string[] { "1X", "2X", "4X" });
-			settings.PixelsToUnitSize = EditorGUILayout.FloatField("Pixels To Unit Size", settings.PixelsToUnitSize);
-			if (settings.PixelsToUnitSize <= 0)
-			{
-				EditorGUILayout.HelpBox("Pixels To Unit Size should be greater than 0.", MessageType.Warning);
-			}
-
-			settings.PackingTag = EditorGUILayout.TextField("Packing Tag", settings.PackingTag);
-
-			// Default pivot
-			var newPivot = (SpriteAlignment)EditorGUILayout.EnumPopup("Pivot", settings.Pivot);
-			// When pivot changed, change the other layer settings as well
-			if (newPivot != settings.Pivot)
-			{
-				List<int> changeLayers = new List<int>();
-				foreach (var layerKeyPair in settings.layerSettings)
-				{
-					if (layerKeyPair.Value.pivot == settings.Pivot)
-					{
-						changeLayers.Add(layerKeyPair.Value.layerIndex);
-					}
-				}
-				foreach (int changeLayer in changeLayers)
-				{
-					settings.layerSettings[changeLayer].pivot = newPivot;
-				}
-				settings.Pivot = newPivot;
-			}
-
-			if (settings.Pivot == SpriteAlignment.Custom)
-			{
-				settings.PivotVector = EditorGUILayout.Vector2Field("Custom Pivot", settings.PivotVector);
-			}
-
-			if (GUILayout.Button("Export Visible Layers"))
-			{
-				ExportLayers();
-			}
-		}
-
 		private void DrawSpriteEntry()
 		{
-			GUILayout.Label("Sprite Creation", styleHeader);
+			showCreateSprites = EditorGUILayout.Foldout(showCreateSprites, "Sprite Creation", styleBoldFoldout);
+
+			if (!showCreateSprites)
+				return;
 
 			createPivot = (SpriteAlignment) EditorGUILayout.EnumPopup("Create Pivot", createPivot);
 
@@ -326,6 +296,9 @@ namespace kontrabida.psdexport
 					// If not visible, disable the row
 					if (disableLayer)
 						GUI.enabled = false;
+
+					// Set parentVisible for settings override in DrawLayerEntry
+					parentVisible = !disableLayer;
 				}
 
 				if (startGroup)
@@ -355,7 +328,7 @@ namespace kontrabida.psdexport
 			// If layer visible, show layer export settings
 			var layerSetting = settings.layerSettings[layerIndex];
 			layerSetting.doExport = visToggle && settingOverride;
-			if (visToggle)
+			if (layerSetting.doExport)
 			{
 				layerSetting.scaleBy = (PSDExporter.ScaleDown) EditorGUILayout
 										.EnumPopup(layerSetting.scaleBy,GUILayout.MaxWidth(70f));
@@ -386,6 +359,57 @@ namespace kontrabida.psdexport
 			EditorGUILayout.EndHorizontal();
 
 			return visToggle;
+		}
+
+		private void DrawExportEntry()
+		{
+			GUILayout.Label("Export Settings", styleHeader);
+
+			settings.ScaleBy = GUILayout.Toolbar(settings.ScaleBy, new string[] { "1X", "2X", "4X" });
+			settings.PixelsToUnitSize = EditorGUILayout.FloatField("Pixels To Unit Size", settings.PixelsToUnitSize);
+			if (settings.PixelsToUnitSize <= 0)
+			{
+				EditorGUILayout.HelpBox("Pixels To Unit Size should be greater than 0.", MessageType.Warning);
+			}
+
+			settings.PackingTag = EditorGUILayout.TextField("Packing Tag", settings.PackingTag);
+
+			// Default pivot
+			var newPivot = (SpriteAlignment)EditorGUILayout.EnumPopup("Default Pivot", settings.Pivot);
+			// When pivot changed, change the other layer settings as well
+			if (newPivot != settings.Pivot)
+			{
+				List<int> changeLayers = new List<int>();
+				foreach (var layerKeyPair in settings.layerSettings)
+				{
+					if (layerKeyPair.Value.pivot == settings.Pivot)
+					{
+						changeLayers.Add(layerKeyPair.Value.layerIndex);
+					}
+				}
+				foreach (int changeLayer in changeLayers)
+				{
+					settings.layerSettings[changeLayer].pivot = newPivot;
+				}
+				settings.Pivot = newPivot;
+			}
+
+			if (settings.Pivot == SpriteAlignment.Custom)
+			{
+				settings.PivotVector = EditorGUILayout.Vector2Field("Custom Pivot", settings.PivotVector);
+			}
+
+			EditorGUILayout.BeginHorizontal();
+			GUILayout.Button("Export Path", GUILayout.Width(EditorGUIUtility.labelWidth));
+			GUI.enabled = false;
+			EditorGUILayout.TextField(GUIContent.none, "");
+			GUI.enabled = true;
+			EditorGUILayout.EndHorizontal();
+
+			if (GUILayout.Button("Export Visible Layers"))
+			{
+				ExportLayers();
+			}
 		}
 
 		private void ExportLayers()

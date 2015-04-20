@@ -400,11 +400,21 @@ namespace kontrabida.psdexport
 
 		private void PickExportPath()
 		{
-			string path = EditorUtility.SaveFolderPanel("Export Path", "", "");
+			string path = EditorUtility.SaveFolderPanel("Export Path", settings.ExportPath, "");
 			if (string.IsNullOrEmpty(path))
-				return;
-			path = path.Substring(Application.dataPath.Length + 1);
-			settings.ExportPath = path;
+			{
+				settings.ExportPath = "";
+			}
+			else
+			{
+				int inPath = path.IndexOf(Application.dataPath);
+				if (inPath < 0 || Application.dataPath.Length == path.Length)
+					path = "";
+				else
+					path = path.Substring(Application.dataPath.Length + 1);
+
+				settings.ExportPath = path;
+			}
 		}
 
 		private void ExportLayers()

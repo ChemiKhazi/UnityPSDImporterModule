@@ -323,14 +323,18 @@ namespace kontrabida.psdexport
 		{
 			string assetPath = AssetDatabase.GetAssetPath(Image);
 			string directoryPath = Path.GetDirectoryName(assetPath);
+			
 			string layerFile = Path.GetFileNameWithoutExtension(assetPath);
-			layerFile += "_" + layerName + ".png";
+			layerFile = string.Format("{0}_{1}.png", layerFile, layerName);
+
 			string layerPath = Path.Combine(directoryPath, layerFile);
 
 			bool hasExportPath = string.IsNullOrEmpty(ExportPath) == false;
 			if (hasExportPath)
 			{
-				layerPath = Path.Combine("Assets/" + ExportPath, layerName + ".png");
+				string basePath = string.Format("Assets/{0}", ExportPath);
+				string imgPath = string.Format("{0}.png", layerName);
+				layerPath = Path.Combine(basePath, imgPath);
 			}
 
 			return layerPath;

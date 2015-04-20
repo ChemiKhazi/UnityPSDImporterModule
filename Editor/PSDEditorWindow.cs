@@ -75,13 +75,6 @@ namespace kontrabida.psdexport
 		private PsdExportSettings settings;
 		private PsdFileInfo fileInfo;
 
-		private Vector2 scrollPos = Vector2.zero;
-
-		private bool showCreateSprites;
-		private SpriteAlignment createPivot;
-		private bool createAtSelection = false;
-		private int createSortLayer = 0;
-
 		private Texture2D image;
 
 		public Texture2D Image
@@ -173,7 +166,7 @@ namespace kontrabida.psdexport
 
 				DrawExportEntry();
 
-				DrawSpriteEntry();
+				DrawCreateEntry();
 			}
 			else
 			{
@@ -181,30 +174,7 @@ namespace kontrabida.psdexport
 			}
 		}
 
-		private void DrawSpriteEntry()
-		{
-			showCreateSprites = EditorGUILayout.Foldout(showCreateSprites, "Sprite Creation", styleBoldFoldout);
-
-			if (!showCreateSprites)
-				return;
-
-			createPivot = (SpriteAlignment) EditorGUILayout.EnumPopup("Create Pivot", createPivot);
-
-			if (_sortingLayerNames != null)
-				createSortLayer = EditorGUILayout.Popup("Sorting Layer", createSortLayer, _sortingLayerNames);
-
-			if (GUILayout.Button("Create at Selection"))
-			{
-				createAtSelection = true;
-				CreateSprites();
-			}
-
-			if (GUILayout.Button("Create Sprites"))
-			{
-				createAtSelection = false;
-				CreateSprites();
-			}
-		}
+		private Vector2 scrollPos = Vector2.zero;
 
 		private void DrawPsdLayers()
 		{
@@ -366,6 +336,9 @@ namespace kontrabida.psdexport
 			GUILayout.Label("Export Settings", styleHeader);
 
 			settings.ScaleBy = GUILayout.Toolbar(settings.ScaleBy, new string[] { "1X", "2X", "4X" });
+
+			settings.AutoReExport = EditorGUILayout.Toggle("Auto Re-Export", settings.AutoReExport);
+
 			settings.PixelsToUnitSize = EditorGUILayout.FloatField("Pixels To Unit Size", settings.PixelsToUnitSize);
 			if (settings.PixelsToUnitSize <= 0)
 			{
@@ -399,10 +372,12 @@ namespace kontrabida.psdexport
 				settings.PivotVector = EditorGUILayout.Vector2Field("Custom Pivot", settings.PivotVector);
 			}
 
+			// Path picker
 			EditorGUILayout.BeginHorizontal();
-			GUILayout.Button("Export Path", GUILayout.Width(EditorGUIUtility.labelWidth));
+			if (GUILayout.Button("Export Path", GUILayout.Width(EditorGUIUtility.labelWidth)))
+				PickExportPath();
 			GUI.enabled = false;
-			EditorGUILayout.TextField(GUIContent.none, "");
+			EditorGUILayout.TextField(GUIContent.none, settings.ExportPath);
 			GUI.enabled = true;
 			EditorGUILayout.EndHorizontal();
 
@@ -412,9 +387,49 @@ namespace kontrabida.psdexport
 			}
 		}
 
+		private void PickExportPath()
+		{
+			string path = EditorUtility.SaveFolderPanel("Export Path", "", "");
+			if (string.IsNullOrEmpty(path))
+				return;
+			path = path.Substring(Application.dataPath.Length + 1);
+			settings.ExportPath = path;
+		}
+
 		private void ExportLayers()
 		{
 			PSDExporter.Export(settings, fileInfo);
+		}
+
+		#region Sprite creation
+		private bool showCreateSprites;
+		private SpriteAlignment createPivot;
+		private bool createAtSelection = false;
+		private int createSortLayer = 0;
+
+		private void DrawCreateEntry()
+		{
+			showCreateSprites = EditorGUILayout.Foldout(showCreateSprites, "Sprite Creation", styleBoldFoldout);
+
+			if (!showCreateSprites)
+				return;
+
+			createPivot = (SpriteAlignment) EditorGUILayout.EnumPopup("Create Pivot", createPivot);
+
+			if (_sortingLayerNames != null)
+				createSortLayer = EditorGUILayout.Popup("Sorting Layer", createSortLayer, _sortingLayerNames);
+
+			if (GUILayout.Button("Create at Selection"))
+			{
+				createAtSelection = true;
+				CreateSprites();
+			}
+
+			if (GUILayout.Button("Create Sprites"))
+			{
+				createAtSelection = false;
+				CreateSprites();
+			}
 		}
 
 		private void CreateSprites()
@@ -592,5 +607,6 @@ namespace kontrabida.psdexport
 				root.layer = Selection.activeGameObject.layer;
 			}
 		}
+		#endregion
 	}
 }

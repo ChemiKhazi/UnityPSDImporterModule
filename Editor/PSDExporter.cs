@@ -191,6 +191,7 @@ namespace kontrabida.psdexport
 
 		public static void Export(PsdExportSettings settings, PsdFileInfo fileInfo)
 		{
+			List<int> exportLayers = new List<int>();
 			foreach (var keypair in settings.layerSettings)
 			{
 				PsdExportSettings.LayerSetting layerSetting = keypair.Value;
@@ -201,8 +202,20 @@ namespace kontrabida.psdexport
 				if (groupInfo != null && !groupInfo.visible)
 					continue;
 
-				CreateSprite(settings, layerSetting.layerIndex);
+				exportLayers.Add(layerSetting.layerIndex);
+				//CreateSprite(settings, layerSetting.layerIndex);
 			}
+
+			int exportCount = 0;
+			foreach (var exportLayer in  exportLayers)
+			{
+				string infoString = string.Format("Exporting {0}/{1} Layers", exportCount, exportLayers.Count);
+
+				EditorUtility.DisplayProgressBar("Exporting PSD Layers", infoString, exportCount / (float) exportLayers.Count);
+				CreateSprite(settings, exportLayer);
+				exportCount++;
+			}
+			EditorUtility.ClearProgressBar();
 			settings.SaveMetaData();
 			settings.SaveLayerMetaData();
 		}

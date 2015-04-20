@@ -13,6 +13,15 @@ namespace kontrabida.psdexport
 	/// </summary>
 	public class PsdExportSettings
 	{
+		private const string TagImport1 = "ImportX1";
+		private const string TagImport2 = "ImportX2";
+		private const string TagImport4 = "ImportX4";
+		private const string TagImportAnchor = "ImportAnchor";
+		private const string TagImportPTU = "ImportPTU|";
+		private const string TagImportPack = "ImportPackTag|";
+		private const string TagExportPath = "ExportPath|";
+		private const string TagExportAuto = "ExportAuto";
+
 		/// <summary>
 		/// Defines export settings for each layer
 		/// </summary>
@@ -58,6 +67,10 @@ namespace kontrabida.psdexport
 		/// The default pivot point for the Unity sprites
 		/// </summary>
 		public Vector2 PivotVector { get; set; }
+
+		public string ExportPath { get; set; }
+
+		public bool AutoReExport { get; set; }
 
 		private SpriteAlignment _pivot;
 		public SpriteAlignment Pivot
@@ -118,20 +131,21 @@ namespace kontrabida.psdexport
 
 		private void LoadMetaData()
 		{
+			AutoReExport = false;
 			string[] pivotNameStrings = Enum.GetNames(typeof(SpriteAlignment));
 			Array pivotNameVals = Enum.GetValues(typeof(SpriteAlignment));
 
 			string[] labels = AssetDatabase.GetLabels(Image);
 			foreach (var label in labels)
 			{
-				if (label.Equals("ImportX1"))
+				if (label.Equals(TagImport1))
 					ScaleBy = 0;
-				if (label.Equals("ImportX2"))
+				if (label.Equals(TagImport2))
 					ScaleBy = 1;
-				if (label.Equals("ImportX4"))
+				if (label.Equals(TagImport4))
 					ScaleBy = 2;
 
-				if (label.StartsWith("ImportAnchor"))
+				if (label.StartsWith(TagImportAnchor))
 				{
 					string pivotType = label.Substring(12);
 					if (pivotType.StartsWith("Custom"))
@@ -154,39 +168,54 @@ namespace kontrabida.psdexport
 					}
 				} // End import anchor if
 
-				if (label.StartsWith("ImportPTU|"))
+				if (label.StartsWith(TagImportPTU))
 				{
-					string ptuVal = label.Substring(10);
+					string ptuVal = label.Substring(TagImportPTU.Length);
 					PixelsToUnitSize = Single.Parse(ptuVal);
 				}
 
-				if (label.StartsWith("ImportPackTag|"))
+				if (label.StartsWith(TagImportPack))
 				{
-					string packTag = label.Substring(14);
+					string packTag = label.Substring(TagImportPack.Length);
 					PackingTag = packTag;
 				}
+
+				if (label.StartsWith(TagExportPath))
+				{
+					string exportPath = label.Substring(TagExportPath.Length);
+					ExportPath = exportPath;
+				}
+
+				if (label.StartsWith(TagExportAuto))
+					AutoReExport = true;
 			} // End label loop
 		}
 
 		public void SaveMetaData()
 		{
-			string[] labels = new string[4];
+			int tagCount = AutoReExport ? 6 : 5;
+			string[] labels = new string[tagCount];
 
 			if (ScaleBy == 0)
-				labels[0] = "ImportX1";
+				labels[0] = TagImport1;
 			if (ScaleBy == 1)
-				labels[0] = "ImportX2";
+				labels[0] = TagImport2;
 			if (ScaleBy == 2)
-				labels[0] = "ImportX4";
+				labels[0] = TagImport4;
 
-			labels[1] = "ImportAnchor" + Pivot.ToString();
+			labels[1] = TagImportAnchor + Pivot.ToString();
 			if (Pivot == SpriteAlignment.Custom)
 			{
-				labels[1] = "ImportAnchorCustom[" + PivotVector.x + "," + PivotVector.y + "]";
+				labels[1] = TagImportAnchor + "Custom[" + PivotVector.x + "," + PivotVector.y + "]";
 			}
 
-			labels[2] = "ImportPTU|" + PixelsToUnitSize;
-			labels[3] = "ImportPackTag|" + PackingTag;
+			labels[2] = TagImportPTU + PixelsToUnitSize;
+			labels[3] = TagImportPack + PackingTag;
+			labels[4] = TagExportPath + ExportPath;
+
+			if (AutoReExport)
+				labels[5] = TagExportAuto;
+
 			AssetDatabase.SetLabels(Image, labels);
 		}
 
@@ -226,14 +255,14 @@ namespace kontrabida.psdexport
 				string[] labels = AssetDatabase.GetLabels(layerSprite);
 				foreach (var label in labels)
 				{
-					if (label.Equals("ImportX1"))
+					if (label.Equals(TagImport1))
 						setting.scaleBy = PSDExporter.ScaleDown.Default;
-					if (label.Equals("ImportX2"))
+					if (label.Equals(TagImport2))
 						setting.scaleBy = PSDExporter.ScaleDown.Half;
-					if (label.Equals("ImportX4"))
+					if (label.Equals(TagImport4))
 						setting.scaleBy = PSDExporter.ScaleDown.Quarter;
 
-					if (label.StartsWith("ImportAnchor"))
+					if (label.StartsWith(TagImportAnchor))
 					{
 						string pivotType = label.Substring(12);
 						// Find by enum
@@ -275,13 +304,13 @@ namespace kontrabida.psdexport
 			string[] labels = new string[2];
 
 			if (setting.scaleBy == PSDExporter.ScaleDown.Default)
-				labels[0] = "ImportX1";
+				labels[0] = TagImport1;
 			if (setting.scaleBy == PSDExporter.ScaleDown.Half)
-				labels[0] = "ImportX2";
+				labels[0] = TagImport2;
 			if (setting.scaleBy == PSDExporter.ScaleDown.Quarter)
-				labels[0] = "ImportX4";
+				labels[0] = TagImport4;
 
-			labels[1] = "ImportAnchor" + setting.pivot;
+			labels[1] = TagImportAnchor + setting.pivot;
 
 			AssetDatabase.SetLabels(layerSprite, labels);
 		}
@@ -293,6 +322,12 @@ namespace kontrabida.psdexport
 			string layerFile = Path.GetFileNameWithoutExtension(assetPath);
 			layerFile += "_" + layerName + ".png";
 			string layerPath = Path.Combine(directoryPath, layerFile);
+
+			bool hasExportPath = string.IsNullOrEmpty(ExportPath) == false;
+			if (hasExportPath)
+			{
+				layerPath = Path.Combine("Assets/" + ExportPath, layerName + ".png");
+			}
 			return layerPath;
 		}
 	}

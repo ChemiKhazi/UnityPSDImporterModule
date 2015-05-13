@@ -347,6 +347,8 @@ namespace kontrabida.psdexport
 			if (!showExportSettings)
 				return;
 
+			EditorGUI.BeginChangeCheck();
+
 			GUILayout.Label("Source Image Scale");
 			settings.ScaleBy = GUILayout.Toolbar(settings.ScaleBy, new string[] { "1X", "2X", "4X" });
 
@@ -393,6 +395,10 @@ namespace kontrabida.psdexport
 			EditorGUILayout.TextField(GUIContent.none, settings.ExportPath);
 			GUI.enabled = true;
 			EditorGUILayout.EndHorizontal();
+
+			if (EditorGUI.EndChangeCheck())
+			{
+			}
 
 			if (GUILayout.Button("Save Export Settings"))
 				settings.SaveMetaData();

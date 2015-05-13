@@ -154,10 +154,11 @@ namespace kontrabida.psdexport
 					if (pivotType.StartsWith("Custom"))
 					{
 						// Get the coordinates value inside the string "[]"
-						string values = pivotType.Substring(pivotType.IndexOf("["),
-															pivotType.IndexOf("]"));
-						string[] vals = values.Split(',');
-						PivotVector = new Vector2(float.Parse(vals[0]), float.Parse(vals[1]));
+						//string values = pivotType.Substring(pivotType.IndexOf("["),
+						//									pivotType.IndexOf("]"));
+						//string[] vals = values.Split(',');
+						//PivotVector = new Vector2(float.Parse(vals[0]), float.Parse(vals[1]));
+						PivotVector = new Vector2(0.5f, 0.5f);
 						Pivot = SpriteAlignment.Custom;
 					}
 					else
@@ -197,6 +198,8 @@ namespace kontrabida.psdexport
 
 		public void SaveMetaData()
 		{
+			Debug.Log("Saving Meta Data");
+
 			int tagCount = AutoReExport ? 6 : 5;
 			string[] labels = new string[tagCount];
 
@@ -221,6 +224,7 @@ namespace kontrabida.psdexport
 				labels[5] = TagExportAuto;
 
 			AssetDatabase.SetLabels(Image, labels);
+			AssetDatabase.Refresh();
 		}
 
 		/// <summary>

@@ -18,7 +18,7 @@ namespace kontrabida.psdexport
 			{
 				if (modPath.ToLower().EndsWith(".psd") == false)
 					continue;
-				var target = Resources.LoadAssetAtPath<Texture2D>(modPath);
+				var target = AssetDatabase.LoadAssetAtPath<Texture2D>(modPath);
 				var exportSettings = new PsdExportSettings(target);
 				if (exportSettings.AutoReExport)
 				{

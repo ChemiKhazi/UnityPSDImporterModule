@@ -6,7 +6,7 @@ using PhotoshopFile;
 using UnityEditor;
 using UnityEngine;
 
-namespace kontrabida.psdexport
+namespace subjectnerdagreement.psdexport
 {
 	/// <summary>
 	/// Defines settings for PSDExporter to use

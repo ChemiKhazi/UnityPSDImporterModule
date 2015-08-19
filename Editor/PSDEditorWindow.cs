@@ -33,7 +33,7 @@ using UnityEngine;
 using UnityEditorInternal;
 using Object = UnityEngine.Object;
 
-namespace kontrabida.psdexport
+namespace subjectnerdagreement.psdexport
 {
 	public class PSDEditorWindow : EditorWindow
 	{
@@ -41,7 +41,7 @@ namespace kontrabida.psdexport
 		private static PSDEditorWindow GetPSDEditor()
 		{
 			var wnd = GetWindow<PSDEditorWindow>();
-			wnd.title = "PSD Import";
+			wnd.title = "PSD Importer";
 			wnd.Show();
 			return wnd;
 		}
@@ -52,7 +52,7 @@ namespace kontrabida.psdexport
 			GetPSDEditor();
 		}
 
-		[MenuItem("Assets/Sprites/PSD Import")]
+		[MenuItem("Assets/PSD Importer")]
 		static void ImportPsdWindow()
 		{
 			var wnd = GetPSDEditor();
@@ -60,7 +60,7 @@ namespace kontrabida.psdexport
 			EditorUtility.SetDirty(wnd);
 		}
 
-		[MenuItem("Assets/Sprites/PSD Import", true)]
+		[MenuItem("Assets/PSD Importer", true)]
 		static bool ImportPsd()
 		{
 			Object[] arr = Selection.objects;
@@ -77,6 +77,7 @@ namespace kontrabida.psdexport
 		private PsdFileInfo fileInfo;
 
 		private Texture2D image;
+		private bool doDebug;
 
 		public Texture2D Image
 		{
@@ -181,7 +182,9 @@ namespace kontrabida.psdexport
 
 		private void DrawPsdLayers()
 		{
+			doDebug = GUILayout.Toggle(doDebug, "Debug");
 			EditorGUILayout.LabelField("Layers", styleHeader);
+			
 			// Headers
 			EditorGUILayout.BeginHorizontal();
 			GUILayout.Space(30f);
@@ -201,9 +204,10 @@ namespace kontrabida.psdexport
 			for (int i = psd.Layers.Count - 1; i >= 0; i--)
 			{
 				Layer layer = psd.Layers[i];
+				
 				// Layer set seems to appear in the photoshop layers
 				// no idea what it does but doesn't seem to be relevant
-				if (layer.Name == "</Layer set>")
+				if (layer.Name.Equals("</Layer set>"))
 					continue;
 
 				// Try to get the group of this layer
@@ -222,6 +226,9 @@ namespace kontrabida.psdexport
 				// If start of group, indent
 				if (startGroup)
 				{
+					if (doDebug)
+						Debug.LogFormat("Starting group - {0}", groupInfo.name);
+
 					groupDepth++;
 
 					// Save the mask info
@@ -231,9 +238,12 @@ namespace kontrabida.psdexport
 				// If exiting a layer group, unindent and continue to next layer
 				if (closeGroup)
 				{
+					if (doDebug)
+						Debug.LogFormat("Closing group - {0}", groupInfo.name);
+
 					// Reset mask info when closing group
-					groupVisibleMask &= (0 << groupDepth);
-					groupOpenMask &= (0 << groupDepth);
+					groupVisibleMask &= ~(1 << groupDepth);
+					groupOpenMask &= ~(1 << groupDepth);
 
 					groupDepth--;
 					continue;
@@ -249,8 +259,11 @@ namespace kontrabida.psdexport
 
 					for (int parentMask = groupDepth - 1; parentMask > 0; parentMask--)
 					{
-						parentOpen &= (groupOpenMask & (1 << parentMask)) > 0;
-						parentVisible &= (groupVisibleMask & (1 << parentMask)) > 0;
+						bool isOpen = (groupOpenMask & (1 << parentMask)) > 0;
+						bool isVisible = (groupVisibleMask & (1 << parentMask)) > 0;
+						
+						parentOpen &= isOpen;
+						parentVisible &= isVisible;
 					}
 
 					bool skipLayer = !groupInfo.opened || !parentOpen;
@@ -264,7 +277,10 @@ namespace kontrabida.psdexport
 
 					// Skip contents if group folder closed
 					if (skipLayer)
+					{
+						SetHiddenLayer(i, groupInfo.visible && parentVisible);
 						continue;
+					}
 
 					// If not visible, disable the row
 					if (disableLayer)
@@ -275,16 +291,40 @@ namespace kontrabida.psdexport
 				}
 
 				if (startGroup)
+				{
 					DrawLayerGroupStart(groupInfo, i, groupDepth - 1);
+					// Save the flags after the group info setting in DrawLayerGroupStart
+					//groupVisibleMask |= ((groupInfo.visible ? 1 : 0) << groupDepth);
+					//groupOpenMask |= ((groupInfo.opened ? 1 : 0) << groupDepth);
+				}
 				else
+				{
 					DrawLayerEntry(layer, i, groupDepth, parentVisible);
+				}
 
 				GUI.enabled = true;
+
 			} // End layer loop
+			if (doDebug)
+				doDebug = false;
 			EditorGUILayout.EndScrollView();
 		}
 
-		private bool DrawLayerEntry(Layer layer, int layerIndex, int indentLevel, bool settingOverride)
+		private void SetHiddenLayer(int layerIndex, bool parentVisible)
+		{
+			if (settings.layerSettings.ContainsKey(layerIndex) == false)
+			{
+				settings.layerSettings.Add(layerIndex, new PsdExportSettings.LayerSetting()
+				{
+					doExport = true,
+					layerIndex = layerIndex,
+					pivot = settings.Pivot
+				});
+			}
+			settings.layerSettings[layerIndex].doExport = fileInfo.LayerVisibility[layerIndex] && parentVisible;
+		}
+
+		private bool DrawLayerEntry(Layer layer, int layerIndex, int indentLevel, bool parentVisible)
 		{
 			EditorGUILayout.BeginHorizontal();
 
@@ -300,7 +340,7 @@ namespace kontrabida.psdexport
 
 			// If layer visible, show layer export settings
 			var layerSetting = settings.layerSettings[layerIndex];
-			layerSetting.doExport = visToggle && settingOverride;
+			layerSetting.doExport = visToggle && parentVisible;
 			if (layerSetting.doExport)
 			{
 				layerSetting.scaleBy = (PSDExporter.ScaleDown)EditorGUILayout
@@ -320,7 +360,8 @@ namespace kontrabida.psdexport
 			EditorGUILayout.BeginHorizontal();
 
 			bool visToggle = groupInfo.visible;
-			// Draw layer visibility toggle
+
+			// Draw group visibility toggle
 			visToggle = EditorGUILayout.Toggle(visToggle, GUILayout.MaxWidth(15f));
 			GUILayout.Space(indentLevel * 20f);
 
@@ -338,7 +379,10 @@ namespace kontrabida.psdexport
 
 		private void DrawExportEntry()
 		{
-			if (GUILayout.Button("Export Visible Layers", GUILayout.Height(40f)))
+			int exportCount = settings.layerSettings.Count(pair => pair.Value.doExport);
+			string exportButtonText = string.Format("Export {0} Layer(s)", exportCount);
+
+			if (GUILayout.Button(exportButtonText, GUILayout.Height(40f)))
 				ExportLayers();
 
 			GUILayout.Space(10f);

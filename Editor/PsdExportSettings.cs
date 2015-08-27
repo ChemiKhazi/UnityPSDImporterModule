@@ -198,8 +198,6 @@ namespace subjectnerdagreement.psdexport
 
 		public void SaveMetaData()
 		{
-			Debug.Log("Saving Meta Data");
-
 			int tagCount = AutoReExport ? 6 : 5;
 			string[] labels = new string[tagCount];
 

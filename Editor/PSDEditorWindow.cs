@@ -73,11 +73,15 @@ namespace subjectnerdagreement.psdexport
 		}
 		#endregion
 
+		private static string[] _sortingLayerNames;
+
 		private PsdExportSettings settings;
 		private PsdFileInfo fileInfo;
 
 		private Texture2D image;
-		private bool doDebug;
+		private int importCount;
+
+		private bool imageLoaded;
 
 		public Texture2D Image
 		{
@@ -88,8 +92,6 @@ namespace subjectnerdagreement.psdexport
 				LoadImage();
 			}
 		}
-
-		private static string[] _sortingLayerNames;
 
 		void OnEnable()
 		{
@@ -111,7 +113,7 @@ namespace subjectnerdagreement.psdexport
 		private bool LoadImage()
 		{
 			settings = new PsdExportSettings(image);
-			showExportSettings = !settings.HasMetaData;
+			showImportSettings = !settings.HasMetaData;
 
 			bool valid = (settings.Psd != null);
 			if (valid)
@@ -124,10 +126,23 @@ namespace subjectnerdagreement.psdexport
 		}
 
 		#region GUI Styles
-		private GUIStyle styleHeader, styleLabelLeft, styleBoldFoldout;
+		private GUIStyle styleHeader, styleLabelLeft, styleBoldFoldout, styleLayerRow, styleCreateBox;
+		private Texture2D icnFolder, icnTexture;
 
 		void SetupStyles()
 		{
+			if (icnFolder == null)
+				icnFolder = EditorGUIUtility.FindTexture("Folder Icon");
+			if (icnTexture == null)
+				icnTexture = EditorGUIUtility.FindTexture("Texture Icon");
+
+			if (styleCreateBox == null)
+			{
+				styleCreateBox = new GUIStyle(EditorStyles.helpBox)
+				{
+					
+				};
+			}
 			if (styleHeader == null)
 			{
 				styleHeader = new GUIStyle(GUI.skin.label)
@@ -151,60 +166,92 @@ namespace subjectnerdagreement.psdexport
 					fontStyle = FontStyle.Bold
 				};
 			}
+			if (styleLayerRow == null)
+			{
+				styleLayerRow = new GUIStyle(GUI.skin.box) {};
+			}
 		}
 		#endregion
+
+		public void OnSelectionChange()
+		{
+			Repaint();
+		}
 
 		public void OnGUI()
 		{
 			SetupStyles();
 
-			EditorGUI.BeginChangeCheck();
-			var img = (Texture2D)EditorGUILayout.ObjectField("PSD File", image, typeof(Texture2D), true);
-			bool changed = EditorGUI.EndChangeCheck();
-			if (changed)
-				Image = img;
+			Vector2 size = new Vector2(150f, 100f);
+			imageLoaded = (image != null && settings.Psd != null);
 
-			if (image != null && settings.Psd != null)
-			{
-				DrawPsdLayers();
+			DrawPsdLayers();
 
-				DrawExportEntry();
+			DrawImportField();
 
-				DrawCreateEntry();
-			}
-			else
-			{
-				EditorGUILayout.HelpBox("This texture is not a PSD file.", MessageType.Error);
-			}
+			DrawImportSettings();
+
+			DrawCreateEntry();
 		}
 
+		#region PSD Layer display functions
 		private Vector2 scrollPos = Vector2.zero;
 
 		private void DrawPsdLayers()
 		{
-			doDebug = GUILayout.Toggle(doDebug, "Debug");
+			EditorGUILayout.Space();
 			EditorGUILayout.LabelField("Layers", styleHeader);
-			
+
 			// Headers
 			EditorGUILayout.BeginHorizontal();
 			GUILayout.Space(30f);
 			GUILayout.Label("Name");
-			GUILayout.Label("Size", GUILayout.MaxWidth(70f));
-			GUILayout.Label("Pivot", GUILayout.MaxWidth(70f));
+			GUILayout.Label("Size", GUILayout.MaxWidth(70f), GUILayout.MinWidth(70f));
+			GUILayout.Label("Pivot", GUILayout.MaxWidth(70f), GUILayout.MinWidth(70f));
 			EditorGUILayout.EndHorizontal();
 
 			scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 
+			if (imageLoaded)
+			{
+				DisplayLayers();
+			}
+			else
+			{
+				EditorGUILayout.HelpBox("No PSD file loaded", MessageType.Error, true);
+			}
+
+			EditorGUILayout.EndScrollView();
+
+			// Draw import button only when image is loaded
+			if (imageLoaded)
+			{
+				string importBtnText = string.Format("Import {0} Layer(s)", importCount);
+				if (GUILayout.Button(importBtnText, GUILayout.Height(25f)))
+					ImportLayers();
+			}
+
+			// End layers box
+			GUILayout.Box(GUIContent.none, GUILayout.Height(4f), GUILayout.ExpandWidth(true));
+		}
+
+		private void DisplayLayers()
+		{
 			int groupDepth = 0;
 			int groupVisibleMask = 1;
 			int groupOpenMask = 1;
 
 			PsdFile psd = settings.Psd;
+
 			// Loop backwards through the layers to display them in the expected order
 			for (int i = psd.Layers.Count - 1; i >= 0; i--)
 			{
 				Layer layer = psd.Layers[i];
-				
+
+				//var instanceInfo = fileInfo.GetInstancedLayer(i);
+				//if (instanceInfo != null && doDebug)
+				//	Debug.LogFormat("Layer {0}, index {1}, is instance of {2}", layer.Name, i, instanceInfo.instanceLayer);
+
 				// Layer set seems to appear in the photoshop layers
 				// no idea what it does but doesn't seem to be relevant
 				if (layer.Name.Equals("</Layer set>"))
@@ -226,9 +273,6 @@ namespace subjectnerdagreement.psdexport
 				// If start of group, indent
 				if (startGroup)
 				{
-					if (doDebug)
-						Debug.LogFormat("Starting group - {0}", groupInfo.name);
-
 					groupDepth++;
 
 					// Save the mask info
@@ -238,9 +282,6 @@ namespace subjectnerdagreement.psdexport
 				// If exiting a layer group, unindent and continue to next layer
 				if (closeGroup)
 				{
-					if (doDebug)
-						Debug.LogFormat("Closing group - {0}", groupInfo.name);
-
 					// Reset mask info when closing group
 					groupVisibleMask &= ~(1 << groupDepth);
 					groupOpenMask &= ~(1 << groupDepth);
@@ -261,7 +302,7 @@ namespace subjectnerdagreement.psdexport
 					{
 						bool isOpen = (groupOpenMask & (1 << parentMask)) > 0;
 						bool isVisible = (groupVisibleMask & (1 << parentMask)) > 0;
-						
+
 						parentOpen &= isOpen;
 						parentVisible &= isVisible;
 					}
@@ -293,9 +334,6 @@ namespace subjectnerdagreement.psdexport
 				if (startGroup)
 				{
 					DrawLayerGroupStart(groupInfo, i, groupDepth - 1);
-					// Save the flags after the group info setting in DrawLayerGroupStart
-					//groupVisibleMask |= ((groupInfo.visible ? 1 : 0) << groupDepth);
-					//groupOpenMask |= ((groupInfo.opened ? 1 : 0) << groupDepth);
 				}
 				else
 				{
@@ -305,9 +343,8 @@ namespace subjectnerdagreement.psdexport
 				GUI.enabled = true;
 
 			} // End layer loop
-			if (doDebug)
-				doDebug = false;
-			EditorGUILayout.EndScrollView();
+
+			importCount = PSDExporter.GetExportCount(settings, fileInfo);
 		}
 
 		private void SetHiddenLayer(int layerIndex, bool parentVisible)
@@ -328,14 +365,17 @@ namespace subjectnerdagreement.psdexport
 		{
 			EditorGUILayout.BeginHorizontal();
 
-			bool visToggle = fileInfo.LayerVisibility[layerIndex];
-
 			// Draw layer visibility toggle
-			visToggle = EditorGUILayout.Toggle(visToggle, GUILayout.MaxWidth(15f));
+			bool visToggle = EditorGUILayout.Toggle(fileInfo.LayerVisibility[layerIndex], GUILayout.MaxWidth(15f));
+
 			GUILayout.Space(indentLevel * 20f);
 
 			// Draw the layer name
-			GUILayout.Label(layer.Name, styleLabelLeft);
+			GUIContent layerDisplay = new GUIContent()
+			{
+				text = layer.Name
+			};
+			GUILayout.Label(layerDisplay, styleLabelLeft, GUILayout.ExpandWidth(true));
 			fileInfo.LayerVisibility[layerIndex] = visToggle;
 
 			// If layer visible, show layer export settings
@@ -343,30 +383,54 @@ namespace subjectnerdagreement.psdexport
 			layerSetting.doExport = visToggle && parentVisible;
 			if (layerSetting.doExport)
 			{
-				layerSetting.scaleBy = (PSDExporter.ScaleDown)EditorGUILayout
-										.EnumPopup(layerSetting.scaleBy, GUILayout.MaxWidth(70f));
-				layerSetting.pivot = (SpriteAlignment)EditorGUILayout
-										.EnumPopup(layerSetting.pivot, GUILayout.MaxWidth(70f));
+				layerSetting.scaleBy = (PSDExporter.ScaleDown)EditorGUILayout.EnumPopup(layerSetting.scaleBy,
+																				GUILayout.MaxWidth(70f),
+																				GUILayout.MinWidth(70f));
+				layerSetting.pivot = (SpriteAlignment)EditorGUILayout.EnumPopup(layerSetting.pivot,
+																				GUILayout.MaxWidth(70f),
+																				GUILayout.MinWidth(70f));
 				settings.layerSettings[layerIndex] = layerSetting;
 			}
 
 			EditorGUILayout.EndHorizontal();
+
 			return visToggle;
 		}
+
+		private bool doGroupSelect;
+		private PSDLayerGroupInfo selectedGroup;
 
 		private bool DrawLayerGroupStart(PSDLayerGroupInfo groupInfo,
 										int layerIndex, int indentLevel)
 		{
-			EditorGUILayout.BeginHorizontal();
-
-			bool visToggle = groupInfo.visible;
+			if (groupInfo == selectedGroup || doGroupSelect)
+				EditorGUILayout.BeginHorizontal(styleLayerRow);
+			else
+				EditorGUILayout.BeginHorizontal();
 
 			// Draw group visibility toggle
-			visToggle = EditorGUILayout.Toggle(visToggle, GUILayout.MaxWidth(15f));
+			bool visToggle = EditorGUILayout.Toggle(groupInfo.visible, GUILayout.MaxWidth(15f));
+
 			GUILayout.Space(indentLevel * 20f);
 
 			// Draw the layer group name
-			groupInfo.opened = EditorGUILayout.Foldout(groupInfo.opened, groupInfo.name);
+			GUIContent groupDisplay = new GUIContent()
+			{
+				image = icnFolder,
+				text = groupInfo.name
+			};
+			groupInfo.opened = EditorGUILayout.Foldout(groupInfo.opened, groupDisplay);
+
+			if (doGroupSelect)
+			{
+				if (GUILayout.Button("Select Group", GUILayout.ExpandWidth(false)))
+				{
+					selectedGroup = groupInfo;
+					doGroupSelect = false;
+				}
+			}
+
+			// Save the data into group info and file info
 			groupInfo.visible = visToggle;
 			fileInfo.LayerVisibility[layerIndex] = visToggle;
 
@@ -374,21 +438,33 @@ namespace subjectnerdagreement.psdexport
 
 			return visToggle;
 		}
+		#endregion
 
-		private bool showExportSettings;
-
-		private void DrawExportEntry()
+		#region Import UI
+		private void DrawImportField()
 		{
-			int exportCount = settings.layerSettings.Count(pair => pair.Value.doExport);
-			string exportButtonText = string.Format("Export {0} Layer(s)", exportCount);
+			using (new EditorGUILayout.HorizontalScope())
+			{
+				string psdString = "PSD File";
+				if (imageLoaded)
+					psdString = image.name;
 
-			if (GUILayout.Button(exportButtonText, GUILayout.Height(40f)))
-				ExportLayers();
+				EditorGUI.BeginChangeCheck();
+				var img = (Texture2D)EditorGUILayout.ObjectField(psdString, image,
+															typeof(Texture2D), false,
+															GUILayout.ExpandWidth(true));
+				bool changed = EditorGUI.EndChangeCheck();
+				if (changed)
+					Image = img;
+			}
+		}
 
-			GUILayout.Space(10f);
+		private bool showImportSettings;
 
-			showExportSettings = EditorGUILayout.Foldout(showExportSettings, "Export Settings", styleBoldFoldout);
-			if (!showExportSettings)
+		private void DrawImportSettings()
+		{
+			showImportSettings = EditorGUILayout.Foldout(showImportSettings, "Import Settings", styleBoldFoldout);
+			if (!showImportSettings || !imageLoaded)
 				return;
 
 			EditorGUI.BeginChangeCheck();
@@ -433,7 +509,7 @@ namespace subjectnerdagreement.psdexport
 
 			// Path picker
 			EditorGUILayout.BeginHorizontal();
-			if (GUILayout.Button("Export Path", GUILayout.Width(EditorGUIUtility.labelWidth)))
+			if (GUILayout.Button("Import Path", GUILayout.Width(EditorGUIUtility.labelWidth)))
 				PickExportPath();
 			GUI.enabled = false;
 			EditorGUILayout.TextField(GUIContent.none, settings.ExportPath);
@@ -444,7 +520,7 @@ namespace subjectnerdagreement.psdexport
 			{
 			}
 
-			if (GUILayout.Button("Save Export Settings"))
+			if (GUILayout.Button("Save Import Settings"))
 				settings.SaveMetaData();
 		}
 
@@ -467,10 +543,11 @@ namespace subjectnerdagreement.psdexport
 			}
 		}
 
-		private void ExportLayers()
+		private void ImportLayers()
 		{
 			PSDExporter.Export(settings, fileInfo);
 		}
+		#endregion
 
 		#region Sprite creation
 		private bool showCreateSprites;
@@ -482,24 +559,76 @@ namespace subjectnerdagreement.psdexport
 		{
 			showCreateSprites = EditorGUILayout.Foldout(showCreateSprites, "Sprite Creation", styleBoldFoldout);
 
-			if (!showCreateSprites)
+			if (!showCreateSprites || !imageLoaded)
 				return;
 
-			createPivot = (SpriteAlignment)EditorGUILayout.EnumPopup("Create Pivot", createPivot);
-
-			if (_sortingLayerNames != null)
-				createSortLayer = EditorGUILayout.Popup("Sorting Layer", createSortLayer, _sortingLayerNames);
-
-			if (GUILayout.Button("Create at Selection"))
+			using (new EditorGUILayout.HorizontalScope(GUILayout.Height(30f)))
 			{
-				createAtSelection = true;
-				CreateSprites();
+				MessageType boxType = MessageType.Warning;
+				string boxMsg = "Select a Layer Group";
+				
+				if (selectedGroup != null)
+				{
+					boxMsg = string.Format("Creating Group: {0}", selectedGroup.name);
+					boxType = MessageType.Info;
+				}
+
+				EditorGUILayout.HelpBox(boxMsg, boxType);
+				//GUILayout.Label(boxMsg, GUILayout.ExpandWidth(true));
+
+				string selectMsg = doGroupSelect ? "Cancel" : "Select Group";
+				if (GUILayout.Button(selectMsg, GUILayout.MaxWidth(100f), GUILayout.ExpandHeight(true)))
+				{
+					doGroupSelect = !doGroupSelect;
+					if (!doGroupSelect)
+						selectedGroup = null;
+				}
 			}
 
-			if (GUILayout.Button("Create Sprites"))
+			bool createSprites = false;
+			bool createUiImgs = false;
+
+			using (new EditorGUILayout.HorizontalScope())
 			{
-				createAtSelection = false;
-				CreateSprites();
+				if (selectedGroup == null)
+					GUI.enabled = false;
+
+				const float buttonHeight = 50f;
+
+				using (new EditorGUILayout.VerticalScope())
+				{
+					GUILayout.Label("2D Sprites", styleHeader);
+					createSprites = GUILayout.Button("Create 2D Sprites",
+													GUILayout.Height(buttonHeight),
+													GUILayout.ExpandHeight(true));
+				}
+
+				using (new EditorGUILayout.VerticalScope())
+				{
+					// Check if selection passes 
+					bool selectionOk = Selection.activeGameObject != null;
+					string btnText = "Select UI Root";
+
+					// Something is being selected, check if selection
+					// is part of UI
+					if (selectionOk)
+					{
+						btnText = "Create UI Images";
+					}
+
+					GUI.enabled = selectionOk;
+
+					GUILayout.Label("UI Images", styleHeader);
+					createUiImgs = GUILayout.Button(btnText,
+													GUILayout.Height(buttonHeight),
+													GUILayout.ExpandHeight(true));
+				}
+				GUI.enabled = true;
+			}
+
+			if (createSprites)
+			{
+				PsdBuilder.BuildToSprites(Selection.activeGameObject, selectedGroup, settings, fileInfo);
 			}
 		}
 

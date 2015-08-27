@@ -17,7 +17,7 @@ namespace subjectnerdagreement.psdexport
 			Quarter
 		}
 
-		private static List<int> GetExportLayers(PsdExportSettings settings, PsdFileInfo fileInfo)
+		public static List<int> GetExportLayers(PsdExportSettings settings, PsdFileInfo fileInfo)
 		{
 			List<int> exportLayers = new List<int>();
 			foreach (var keypair in settings.layerSettings)
@@ -43,19 +43,35 @@ namespace subjectnerdagreement.psdexport
 			return exportLayers.Count;
 		}
 
-		public static void Export(PsdExportSettings settings, PsdFileInfo fileInfo)
+		public static void Export(PsdExportSettings settings, PsdFileInfo fileInfo, bool exportExisting = true)
 		{
-			var exportLayers = GetExportLayers(settings, fileInfo);
+			List<int> layerIndices = GetExportLayers(settings, fileInfo);
+
+			// If not going to export existing, filter out layers with existing files
+			if (exportExisting == false)
+			{
+				layerIndices = layerIndices.Where(delegate(int layerIndex)
+				{
+					string filePath = GetLayerFilename(settings, layerIndex);
+					// If file exists, don't export
+					return !File.Exists(filePath);
+				}).ToList();	
+			}
 
 			int exportCount = 0;
-			foreach (var exportLayer in  exportLayers)
+			foreach (int layerIndex in  layerIndices)
 			{
-				string infoString = string.Format("Exporting {0} / {1} Layers", exportCount, exportLayers.Count);
+				string infoString = string.Format("Exporting {0} / {1} Layers", exportCount, layerIndices.Count);
 				string fileString = string.Format("Exporting PSD Layers: {0}", settings.Filename);
-				EditorUtility.DisplayProgressBar(fileString, infoString, exportCount / (float) exportLayers.Count);
-				CreateSprite(settings, exportLayer);
+
+				float progress = exportCount/(float) layerIndices.Count;
+
+				EditorUtility.DisplayProgressBar(fileString, infoString, progress);
+				
+				CreateSprite(settings, layerIndex);
 				exportCount++;
 			}
+
 			EditorUtility.ClearProgressBar();
 			settings.SaveMetaData();
 			settings.SaveLayerMetaData();
@@ -113,49 +129,62 @@ namespace subjectnerdagreement.psdexport
 			return tex;
 		}
 
-		private static Sprite SaveAsset(PsdExportSettings settings, Texture2D tex, int layer)
+		public static string GetLayerFilename(PsdExportSettings settings, int layerIndex)
 		{
-			PsdExportSettings.LayerSetting layerSetting = settings.layerSettings[layer];
-
-			string layerName = settings.Psd.Layers[layer].Name;
+			// Strip out invalid characters from the file name
+			string layerName = settings.Psd.Layers[layerIndex].Name;
 			foreach (char invalidChar in Path.GetInvalidFileNameChars())
 			{
 				layerName = layerName.Replace(invalidChar, '-');
 			}
 
-			string path = settings.GetLayerPath(layerName);
+			layerName = settings.GetLayerPath(layerName);
+
+			return layerName;
+		}
+
+		private static Sprite SaveAsset(PsdExportSettings settings, Texture2D tex, int layer)
+		{
+			string assetPath = GetLayerFilename(settings, layer);
 
 			// Setup scaling variables
 			float pixelsToUnits = settings.PixelsToUnitSize;
 
-			// Global settings scaling
+			// Apply global scaling, if any
 			if (settings.ScaleBy > 0)
 			{
 				tex = ScaleTextureByMipmap(tex, settings.ScaleBy);
 			}
 
+			PsdExportSettings.LayerSetting layerSetting = settings.layerSettings[layer];
+
 			// Then scale by layer scale
 			if (layerSetting.scaleBy != ScaleDown.Default)
 			{
+				// By default, scale by half
 				int scaleLevel = 1;
 				pixelsToUnits = Mathf.RoundToInt(settings.PixelsToUnitSize/2f);
+				
+				// Setting is actually scale by quarter
 				if (layerSetting.scaleBy == ScaleDown.Quarter)
 				{
 					scaleLevel = 2;
 					pixelsToUnits = Mathf.RoundToInt(settings.PixelsToUnitSize/4f);
 				}
+
+				// Apply scaling
 				tex = ScaleTextureByMipmap(tex, scaleLevel);
 			}
 
 			byte[] buf = tex.EncodeToPNG();
-			File.WriteAllBytes(path, buf);
+			File.WriteAllBytes(assetPath, buf);
 			AssetDatabase.Refresh();
 
 			// Load the texture so we can change the type
-			var textureObj = AssetDatabase.LoadAssetAtPath(path, typeof(Texture2D));
+			var textureObj = AssetDatabase.LoadAssetAtPath(assetPath, typeof(Texture2D));
 
 			// Get the texture importer for the asset
-			TextureImporter textureImporter = (TextureImporter)AssetImporter.GetAtPath(path);
+			TextureImporter textureImporter = (TextureImporter)AssetImporter.GetAtPath(assetPath);
 			// Read out the texture import settings so import pivot point can be changed
 			TextureImporterSettings importSetting = new TextureImporterSettings();
 			textureImporter.ReadTextureSettings(importSetting);
@@ -178,10 +207,10 @@ namespace subjectnerdagreement.psdexport
 			textureImporter.SetTextureSettings(importSetting);
 
 			EditorUtility.SetDirty(textureObj);
-			AssetDatabase.WriteImportSettingsIfDirty(path);
-			AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+			AssetDatabase.WriteImportSettingsIfDirty(assetPath);
+			AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
 
-			return (Sprite)AssetDatabase.LoadAssetAtPath(path, typeof(Sprite));
+			return (Sprite)AssetDatabase.LoadAssetAtPath(assetPath, typeof(Sprite));
 		}
 
 		private static Texture2D ScaleTextureByMipmap(Texture2D tex, int mipLevel)

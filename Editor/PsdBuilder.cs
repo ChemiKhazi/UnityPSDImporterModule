@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using PhotoshopFile;
+using UnityEditor;
 using UnityEngine;
 
 namespace subjectnerdagreement.psdexport
@@ -147,8 +148,10 @@ namespace subjectnerdagreement.psdexport
 		}
 		#endregion
 
-		private static void SpriteCreator()
+		private static void SpriteCreator(GameObject sprObj, Sprite sprite, TextureImporterSettings sprSettings)
 		{
+			var spr = sprObj.AddComponent<SpriteRenderer>();
+			spr.sprite = sprite;
 		}
 	}
 }

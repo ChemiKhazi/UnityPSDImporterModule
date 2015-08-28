@@ -551,9 +551,7 @@ namespace subjectnerdagreement.psdexport
 
 		#region Sprite creation
 		private bool showCreateSprites;
-		private SpriteAlignment createPivot;
-		private bool createAtSelection = false;
-		private int createSortLayer = 0;
+		private SpriteAlignment createAlign = SpriteAlignment.Center;
 
 		private void DrawCreateEntry()
 		{
@@ -585,6 +583,11 @@ namespace subjectnerdagreement.psdexport
 				}
 			}
 
+			using (new EditorGUILayout.HorizontalScope())
+			{
+				createAlign = (SpriteAlignment)EditorGUILayout.EnumPopup("Creation Alignment", createAlign);
+			}
+
 			bool createSprites = false;
 			bool createUiImgs = false;
 
@@ -613,10 +616,13 @@ namespace subjectnerdagreement.psdexport
 					// is part of UI
 					if (selectionOk)
 					{
-						btnText = "Create UI Images";
+						var checkCanvas = Selection.activeGameObject.GetComponentInParent<Canvas>();
+						selectionOk = (checkCanvas != null);
+						if (selectionOk)
+							btnText = "Create UI Images";
 					}
 
-					GUI.enabled = selectionOk;
+					GUI.enabled = selectionOk && selectedGroup != null;
 
 					GUILayout.Label("UI Images", styleHeader);
 					createUiImgs = GUILayout.Button(btnText,
@@ -627,185 +633,9 @@ namespace subjectnerdagreement.psdexport
 			}
 
 			if (createSprites)
-			{
-				PsdBuilder.BuildToSprites(Selection.activeGameObject, selectedGroup, settings, fileInfo);
-			}
-		}
-
-		private void CreateSprites()
-		{
-			int zOrder = settings.Psd.Layers.Count;
-
-			// Find scaling factor
-			float posScale = 1f;
-			switch (settings.ScaleBy)
-			{
-				case 1:
-					posScale = 0.5f;
-					break;
-				case 2:
-					posScale = 0.25f;
-					break;
-			}
-
-			GameObject root = new GameObject(settings.Filename);
-
-			// Create the offset vector
-			Vector3 createOffset = Vector3.zero;
-			if (createPivot != SpriteAlignment.TopLeft)
-			{
-				Vector2 docSize = new Vector2(settings.Psd.ColumnCount, settings.Psd.RowCount);
-				docSize *= posScale;
-
-				if (createPivot == SpriteAlignment.Center ||
-					createPivot == SpriteAlignment.LeftCenter ||
-					createPivot == SpriteAlignment.RightCenter)
-				{
-					createOffset.y = (docSize.y / 2) / settings.PixelsToUnitSize;
-				}
-				if (createPivot == SpriteAlignment.BottomCenter ||
-					createPivot == SpriteAlignment.BottomLeft ||
-					createPivot == SpriteAlignment.BottomRight)
-				{
-					createOffset.y = docSize.y / settings.PixelsToUnitSize;
-				}
-
-				if (createPivot == SpriteAlignment.Center ||
-					createPivot == SpriteAlignment.TopCenter ||
-					createPivot == SpriteAlignment.BottomCenter)
-				{
-					createOffset.x = -(docSize.x / 2) / settings.PixelsToUnitSize;
-				}
-				if (createPivot == SpriteAlignment.RightCenter ||
-					createPivot == SpriteAlignment.TopRight ||
-					createPivot == SpriteAlignment.BottomRight)
-				{
-					createOffset.x = -(docSize.x) / settings.PixelsToUnitSize;
-				}
-			}
-
-			// Loop through the layers
-			Dictionary<PSDLayerGroupInfo, GameObject> groupHeaders = new Dictionary<PSDLayerGroupInfo, GameObject>();
-			GameObject lastParent = root;
-			for (int i = settings.Psd.Layers.Count - 1; i >= 0; i--)
-			{
-				var groupInfo = fileInfo.GetGroupByLayerIndex(i);
-				if (groupInfo != null && !groupInfo.visible)
-					continue;
-
-				if (!fileInfo.LayerVisibility[i])
-					continue;
-
-				Layer layer = settings.Psd.Layers[i];
-
-				bool inGroup = groupInfo != null;
-
-				if (inGroup)
-				{
-					bool startGroup = groupInfo.end == i;
-					bool closeGroup = groupInfo.start == i;
-
-					if (startGroup)
-					{
-						GameObject groupRoot = new GameObject(layer.Name);
-						groupRoot.transform.parent = lastParent.transform;
-						groupRoot.transform.localPosition = Vector3.zero;
-						groupRoot.transform.localScale = Vector3.one;
-
-						lastParent = groupRoot;
-						groupHeaders.Add(groupInfo, groupRoot);
-						continue;
-					}
-					if (closeGroup)
-					{
-						lastParent = groupHeaders[groupInfo].transform.parent.gameObject;
-						continue;
-					}
-				}
-
-				// Try to get the sprite from the asset database first
-				string assetPath = AssetDatabase.GetAssetPath(image);
-				string path = Path.Combine(Path.GetDirectoryName(assetPath),
-					Path.GetFileNameWithoutExtension(assetPath) + "_" + layer.Name + ".png");
-
-				// Sprites doesn't exist, create it
-				Sprite spr = (Sprite)AssetDatabase.LoadAssetAtPath(path, typeof(Sprite));
-				if (spr == null)
-				{
-					spr = PSDExporter.CreateSprite(settings, i);
-				}
-
-				// Get the pivot settings for the sprite
-				TextureImporter spriteSettings = (TextureImporter)AssetImporter.GetAtPath(path);
-				TextureImporterSettings sprImport = new TextureImporterSettings();
-				spriteSettings.ReadTextureSettings(sprImport);
-
-				GameObject go = new GameObject(layer.Name);
-				SpriteRenderer sr = go.AddComponent<SpriteRenderer>();
-				sr.sprite = spr;
-				sr.sortingOrder = zOrder--;
-				if (_sortingLayerNames != null)
-				{
-					sr.sortingLayerName = _sortingLayerNames[createSortLayer];
-				}
-
-				Vector3 goPos = Vector3.zero;
-				Vector2 sprPivot = new Vector2(0.5f, 0.5f);
-				if (sprImport.spriteAlignment == (int)SpriteAlignment.Custom)
-				{
-					sprPivot = sprImport.spritePivot;
-				}
-				if (sprImport.spriteAlignment == (int)SpriteAlignment.TopLeft ||
-					sprImport.spriteAlignment == (int)SpriteAlignment.LeftCenter ||
-					sprImport.spriteAlignment == (int)SpriteAlignment.BottomLeft)
-				{
-					sprPivot.x = 0f;
-				}
-				if (sprImport.spriteAlignment == (int)SpriteAlignment.TopRight ||
-					sprImport.spriteAlignment == (int)SpriteAlignment.RightCenter ||
-					sprImport.spriteAlignment == (int)SpriteAlignment.BottomRight)
-				{
-					sprPivot.x = 1;
-				}
-				if (sprImport.spriteAlignment == (int)SpriteAlignment.TopLeft ||
-					sprImport.spriteAlignment == (int)SpriteAlignment.TopCenter ||
-					sprImport.spriteAlignment == (int)SpriteAlignment.TopRight)
-				{
-					sprPivot.y = 1;
-				}
-				if (sprImport.spriteAlignment == (int)SpriteAlignment.BottomLeft ||
-					sprImport.spriteAlignment == (int)SpriteAlignment.BottomCenter ||
-					sprImport.spriteAlignment == (int)SpriteAlignment.BottomRight)
-				{
-					sprPivot.y = 0;
-				}
-
-				goPos.x = ((layer.Rect.width * sprPivot.x) + layer.Rect.x);
-				goPos.x /= settings.PixelsToUnitSize;
-				goPos.y = (-(layer.Rect.height * (1 - sprPivot.y)) - layer.Rect.y);
-				goPos.y /= settings.PixelsToUnitSize;
-				goPos.x *= posScale;
-				goPos.y *= posScale;
-
-				goPos += createOffset;
-
-				go.transform.parent = lastParent.transform;
-				go.transform.localScale = Vector3.one;
-				go.transform.localPosition = goPos;
-
-				if (createAtSelection && Selection.activeGameObject != null)
-				{
-					go.layer = Selection.activeGameObject.layer;
-				}
-			}
-
-			if (createAtSelection && Selection.activeGameObject != null)
-			{
-				root.transform.parent = Selection.activeGameObject.transform;
-				root.transform.localScale = Vector3.one;
-				root.transform.localPosition = Vector3.zero;
-				root.layer = Selection.activeGameObject.layer;
-			}
+				PsdBuilder.BuildToSprites(Selection.activeGameObject, selectedGroup, settings, fileInfo, createAlign);
+			if (createUiImgs)
+				PsdBuilder.BuildToUi(Selection.activeGameObject, selectedGroup, settings, fileInfo, createAlign);
 		}
 		#endregion
 	}

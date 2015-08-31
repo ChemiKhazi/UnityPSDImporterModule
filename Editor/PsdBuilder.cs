@@ -122,7 +122,8 @@ namespace subjectnerdagreement.psdexport
 						}
 
 						// Start or end group doesn't have visible sprite object, skip to next layer
-						continue;}
+						continue;
+					}
 				} // End processing of group start/end
 
 				// If got to here, processing a visual layer
@@ -365,7 +366,34 @@ namespace subjectnerdagreement.psdexport
 
 		private static Vector3 UiGetGroupPos(GameObject groupRoot, SpriteAlignment alignment)
 		{
-			return groupRoot.transform.position;
+			//return groupRoot.transform.position;
+			Vector2 min = new Vector2(float.MaxValue, float.MaxValue);
+			Vector2 max = new Vector2(float.MinValue, float.MinValue);
+
+			var tList = groupRoot.GetComponentsInChildren<RectTransform>();
+			foreach (var rectTransform in tList)
+			{
+				if (rectTransform.gameObject == groupRoot)
+					continue;
+				
+				var rectSize = rectTransform.sizeDelta;
+				var rectPivot = rectTransform.pivot;
+
+				var calcMin = rectTransform.position;
+				calcMin.x -= rectSize.x*rectPivot.x;
+				calcMin.y -= rectSize.y*rectPivot.y;
+
+				var calcMax = calcMin + new Vector3(rectSize.x, rectSize.y);
+
+				min = Vector2.Min(min, calcMin);
+				max = Vector2.Max(max, calcMax);
+			}
+
+			Vector2 pivot = GetPivot(alignment);
+			Vector3 pos = Vector3.zero;
+			pos.x = Mathf.Lerp(min.x, max.x, pivot.x);
+			pos.y = Mathf.Lerp(min.y, max.y, pivot.y);
+			return pos;
 		}
 	}
 }

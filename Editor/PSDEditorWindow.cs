@@ -126,7 +126,7 @@ namespace subjectnerdagreement.psdexport
 		}
 
 		#region GUI Styles
-		private GUIStyle styleHeader, styleLabelLeft, styleBoldFoldout, styleLayerRow, styleCreateBox;
+		private GUIStyle styleHeader, styleLabelLeft, styleBoldFoldout, styleLayerRow, styleLayerNormal;
 		private Texture2D icnFolder, icnTexture;
 
 		void SetupStyles()
@@ -136,13 +136,6 @@ namespace subjectnerdagreement.psdexport
 			if (icnTexture == null)
 				icnTexture = EditorGUIUtility.FindTexture("Texture Icon");
 
-			if (styleCreateBox == null)
-			{
-				styleCreateBox = new GUIStyle(EditorStyles.helpBox)
-				{
-					
-				};
-			}
 			if (styleHeader == null)
 			{
 				styleHeader = new GUIStyle(GUI.skin.label)
@@ -168,9 +161,20 @@ namespace subjectnerdagreement.psdexport
 			}
 			if (styleLayerRow == null)
 			{
-				styleLayerRow = new GUIStyle(GUI.skin.box) {};
+				styleLayerRow = new GUIStyle(GUI.skin.box)
+				{
+					margin = new RectOffset(0, 0, 0, 0),
+					padding = new RectOffset(0, 0, 0, 0),
+					contentOffset = new Vector2(0, 0)
+				};
+			}
+			if (styleLayerNormal == null)
+			{
+				styleLayerNormal = new GUIStyle();
 			}
 		}
+
+		private Dictionary<PSDLayerGroupInfo, Rect> groupRects; 
 		#endregion
 
 		public void OnSelectionChange()
@@ -185,19 +189,47 @@ namespace subjectnerdagreement.psdexport
 			Vector2 size = new Vector2(150f, 100f);
 			imageLoaded = (image != null && settings.Psd != null);
 
-			DrawPsdLayers();
+			groupRects = DrawPsdLayers();
 
 			DrawImportField();
 
 			DrawImportSettings();
 
 			DrawCreateEntry();
+
+			ProcessMouse(groupRects);
+		}
+
+		protected void ProcessMouse(Dictionary<PSDLayerGroupInfo, Rect> groupRects)
+		{
+			if (groupRects == null)
+				return;
+			var evt = Event.current;
+
+			if (scrollViewRect.Contains(evt.mousePosition) == false)
+				return;
+			
+			foreach (KeyValuePair<PSDLayerGroupInfo, Rect> keypair in groupRects)
+			{
+				if (evt.button == 0 && evt.type == EventType.MouseDown)
+				{
+					var targetRect = keypair.Value;
+					targetRect.x += scrollViewRect.x;
+					targetRect.y += scrollViewRect.y;
+
+					if (targetRect.Contains(evt.mousePosition))
+					{
+						selectedGroup = (selectedGroup == keypair.Key) ? null : keypair.Key;
+					}
+				}
+			}
 		}
 
 		#region PSD Layer display functions
 		private Vector2 scrollPos = Vector2.zero;
+		private Rect scrollViewRect;
 
-		private void DrawPsdLayers()
+		private Dictionary<PSDLayerGroupInfo, Rect> DrawPsdLayers()
 		{
 			EditorGUILayout.Space();
 			EditorGUILayout.LabelField("Layers", styleHeader);
@@ -211,10 +243,12 @@ namespace subjectnerdagreement.psdexport
 			EditorGUILayout.EndHorizontal();
 
 			scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
-
+			
+			Dictionary<PSDLayerGroupInfo, Rect> groupRects = null;
+			
 			if (imageLoaded)
 			{
-				DisplayLayers();
+				groupRects = DisplayLayers();
 			}
 			else
 			{
@@ -222,6 +256,7 @@ namespace subjectnerdagreement.psdexport
 			}
 
 			EditorGUILayout.EndScrollView();
+			scrollViewRect = GUILayoutUtility.GetLastRect();
 
 			// Draw import button only when image is loaded
 			if (imageLoaded)
@@ -233,10 +268,16 @@ namespace subjectnerdagreement.psdexport
 
 			// End layers box
 			GUILayout.Box(GUIContent.none, GUILayout.Height(4f), GUILayout.ExpandWidth(true));
+
+			if (!imageLoaded)
+				return null;
+			return groupRects;
 		}
 
-		private void DisplayLayers()
+		private Dictionary<PSDLayerGroupInfo, Rect> DisplayLayers()
 		{
+			Dictionary<PSDLayerGroupInfo, Rect> groupRects = new Dictionary<PSDLayerGroupInfo, Rect>();
+
 			int groupDepth = 0;
 			int groupVisibleMask = 1;
 			int groupOpenMask = 1;
@@ -333,7 +374,8 @@ namespace subjectnerdagreement.psdexport
 
 				if (startGroup)
 				{
-					DrawLayerGroupStart(groupInfo, i, groupDepth - 1);
+					var rect = DrawLayerGroupStart(groupInfo, i, groupDepth - 1);
+					groupRects.Add(groupInfo, rect);
 				}
 				else
 				{
@@ -345,6 +387,7 @@ namespace subjectnerdagreement.psdexport
 			} // End layer loop
 
 			importCount = PSDExporter.GetExportCount(settings, fileInfo);
+			return groupRects;
 		}
 
 		private void SetHiddenLayer(int layerIndex, bool parentVisible)
@@ -373,9 +416,11 @@ namespace subjectnerdagreement.psdexport
 			// Draw the layer name
 			GUIContent layerDisplay = new GUIContent()
 			{
+				image = icnTexture,
 				text = layer.Name
 			};
-			GUILayout.Label(layerDisplay, styleLabelLeft, GUILayout.ExpandWidth(true));
+			EditorGUILayout.LabelField(layerDisplay, styleLabelLeft, GUILayout.ExpandWidth(true));
+
 			fileInfo.LayerVisibility[layerIndex] = visToggle;
 
 			// If layer visible, show layer export settings
@@ -397,17 +442,17 @@ namespace subjectnerdagreement.psdexport
 			return visToggle;
 		}
 
-		private bool doGroupSelect;
 		private PSDLayerGroupInfo selectedGroup;
 
-		private bool DrawLayerGroupStart(PSDLayerGroupInfo groupInfo,
+		private Rect DrawLayerGroupStart(PSDLayerGroupInfo groupInfo,
 										int layerIndex, int indentLevel)
 		{
-			if (groupInfo == selectedGroup || doGroupSelect)
-				EditorGUILayout.BeginHorizontal(styleLayerRow);
-			else
-				EditorGUILayout.BeginHorizontal();
+			GUIStyle style = styleLayerNormal;
+			if (selectedGroup != null && selectedGroup.ContainsLayer(layerIndex))
+				style = styleLayerRow;
 
+			Rect groupRect = EditorGUILayout.BeginHorizontal(style);
+			
 			// Draw group visibility toggle
 			bool visToggle = EditorGUILayout.Toggle(groupInfo.visible, GUILayout.MaxWidth(15f));
 
@@ -419,16 +464,14 @@ namespace subjectnerdagreement.psdexport
 				image = icnFolder,
 				text = groupInfo.name
 			};
-			groupInfo.opened = EditorGUILayout.Foldout(groupInfo.opened, groupDisplay);
+			groupInfo.opened = EditorGUILayout.Foldout(groupInfo.opened, GUIContent.none);
+			
+			var foldoutRect = GUILayoutUtility.GetLastRect();
+			foldoutRect.xMin += 13f;
+			foldoutRect.width = 150f;
+			EditorGUI.LabelField(foldoutRect, groupDisplay);
 
-			if (doGroupSelect)
-			{
-				if (GUILayout.Button("Select Group", GUILayout.ExpandWidth(false)))
-				{
-					selectedGroup = groupInfo;
-					doGroupSelect = false;
-				}
-			}
+			GUILayout.FlexibleSpace();
 
 			// Save the data into group info and file info
 			groupInfo.visible = visToggle;
@@ -436,7 +479,7 @@ namespace subjectnerdagreement.psdexport
 
 			EditorGUILayout.EndHorizontal();
 
-			return visToggle;
+			return groupRect;
 		}
 		#endregion
 
@@ -572,15 +615,6 @@ namespace subjectnerdagreement.psdexport
 				}
 
 				EditorGUILayout.HelpBox(boxMsg, boxType);
-				//GUILayout.Label(boxMsg, GUILayout.ExpandWidth(true));
-
-				string selectMsg = doGroupSelect ? "Cancel" : "Select Group";
-				if (GUILayout.Button(selectMsg, GUILayout.MaxWidth(100f), GUILayout.ExpandHeight(true)))
-				{
-					doGroupSelect = !doGroupSelect;
-					if (!doGroupSelect)
-						selectedGroup = null;
-				}
 			}
 
 			using (new EditorGUILayout.HorizontalScope())

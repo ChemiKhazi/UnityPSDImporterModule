@@ -41,35 +41,37 @@ namespace subjectnerdagreement.psdexport
 		private static PSDEditorWindow GetPSDEditor()
 		{
 			var wnd = GetWindow<PSDEditorWindow>();
-			wnd.titleContent = new GUIContent("PSD Importer");
-			wnd.Show();
-			return wnd;
-		}
+			wnd.Setup();
 
-		[MenuItem("Sprites/PSD Import")]
-		public static void ShowWindow()
-		{
-			GetPSDEditor();
+			wnd.Show();
+
+			return wnd;
 		}
 
 		[MenuItem("Assets/PSD Importer")]
 		static void ImportPsdWindow()
 		{
-			var wnd = GetPSDEditor();
-			wnd.Image = (Texture2D)Selection.objects[0];
-			EditorUtility.SetDirty(wnd);
+			var window = GetPSDEditor();
+
+			if (PsdAssetSelected)
+			{
+				window.Image = (Texture2D)Selection.objects[0];
+				EditorUtility.SetDirty(window);
+			}
 		}
 
-		[MenuItem("Assets/PSD Importer", true)]
-		static bool ImportPsd()
+		public static bool PsdAssetSelected
 		{
-			Object[] arr = Selection.objects;
+			get
+			{
+				Object[] arr = Selection.objects;
 
-			if (arr.Length != 1)
-				return false;
+				if (arr.Length != 1)
+					return false;
 
-			string assetPath = AssetDatabase.GetAssetPath(arr[0]);
-			return assetPath.ToUpper().EndsWith(".PSD");
+				string assetPath = AssetDatabase.GetAssetPath(arr[0]);
+				return assetPath.ToUpper().EndsWith(".PSD");
+			}
 		}
 		#endregion
 
@@ -82,6 +84,8 @@ namespace subjectnerdagreement.psdexport
 		private int importCount;
 
 		private bool imageLoaded;
+
+		private bool isDragging;
 
 		public Texture2D Image
 		{
@@ -126,56 +130,73 @@ namespace subjectnerdagreement.psdexport
 		}
 
 		#region GUI Styles
+		private bool styleIsSetup = false;
 		private GUIStyle styleHeader, styleLabelLeft, styleBoldFoldout, styleLayerSelected, styleLayerNormal;
 		private Texture2D icnFolder, icnTexture;
 
 		void SetupStyles()
 		{
-			if (icnFolder == null)
-				icnFolder = EditorGUIUtility.FindTexture("Folder Icon");
-			if (icnTexture == null)
-				icnTexture = EditorGUIUtility.FindTexture("Texture Icon");
+			if (styleIsSetup)
+				return;
+			
+			icnFolder = EditorGUIUtility.FindTexture("Folder Icon");
+			icnTexture = EditorGUIUtility.FindTexture("Texture Icon");
 
-			if (styleHeader == null)
+			styleHeader = new GUIStyle(GUI.skin.label)
 			{
-				styleHeader = new GUIStyle(GUI.skin.label)
-				{
-					alignment = TextAnchor.MiddleCenter,
-					fontStyle = FontStyle.Bold
-				};
-			}
-			if (styleLabelLeft == null)
+				alignment = TextAnchor.MiddleCenter,
+				fontStyle = FontStyle.Bold
+			};
+
+			styleLabelLeft = new GUIStyle(GUI.skin.label)
 			{
-				styleLabelLeft = new GUIStyle(GUI.skin.label)
-				{
-					alignment = TextAnchor.MiddleLeft,
-					padding = new RectOffset(0, 0, 0, 0)
-				};
-			}
-			if (styleBoldFoldout == null)
+				alignment = TextAnchor.MiddleLeft,
+				padding = new RectOffset(0, 0, 0, 0)
+			};
+
+			styleBoldFoldout = new GUIStyle(EditorStyles.foldout)
 			{
-				styleBoldFoldout = new GUIStyle(EditorStyles.foldout)
-				{
-					fontStyle = FontStyle.Bold
-				};
-			}
-			if (styleLayerSelected == null)
+				fontStyle = FontStyle.Bold
+			};
+
+			styleLayerSelected = new GUIStyle(GUI.skin.box)
 			{
-				styleLayerSelected = new GUIStyle(GUI.skin.box)
-				{
-					margin = new RectOffset(0, 0, 0, 0),
-					padding = new RectOffset(0, 0, 0, 0),
-					contentOffset = new Vector2(0, 0)
-				};
-			}
-			if (styleLayerNormal == null)
-			{
-				styleLayerNormal = new GUIStyle();
-			}
+				margin = new RectOffset(0, 0, 0, 0),
+				padding = new RectOffset(0, 0, 0, 0),
+				contentOffset = new Vector2(0, 0)
+			};
+
+			styleLayerNormal = new GUIStyle();
+
+			styleIsSetup = true;
 		}
 
 		private Dictionary<PSDLayerGroupInfo, Rect> groupRects;
 		#endregion
+
+		public void Setup()
+		{
+			titleContent = new GUIContent("PSD Importer");
+			EditorApplication.hierarchyWindowItemOnGUI += HandleHierarchyItem;
+
+			/*
+			 * Another possible way to access the hierarchy window
+			 * 
+			Assembly asm = typeof(UnityEditor.EditorWindow).Assembly;
+			Type wndType = asm.GetType("UnityEditor.SceneHierarchyWindow");
+			hierarchyWindow = EditorWindow.GetWindow(wndType);
+
+			var treeViewVal = wndType.GetProperty("treeView", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(hierarchyWindow, null);
+			var stateVal = treeViewVal.GetType()
+				.GetProperty("state")
+				.GetValue(treeViewVal, null);
+			*/
+		}
+
+		public void OnDestroy()
+		{
+			EditorApplication.hierarchyWindowItemOnGUI -= HandleHierarchyItem;
+		}
 
 		public void OnSelectionChange()
 		{
@@ -189,6 +210,7 @@ namespace subjectnerdagreement.psdexport
 			Vector2 size = new Vector2(150f, 100f);
 			imageLoaded = (image != null && settings.Psd != null);
 
+			// Draw the layers, store where the layer groups are
 			groupRects = DrawPsdLayers();
 
 			DrawImportField();
@@ -197,19 +219,41 @@ namespace subjectnerdagreement.psdexport
 
 			DrawCreateEntry();
 
-			ProcessMouse(groupRects);
+			ProcessMouse();
 		}
 
-		protected void ProcessMouse(Dictionary<PSDLayerGroupInfo, Rect> groupRects)
+		#region Mouse/Drag Drop processing
+		protected void ProcessMouse()
 		{
+			// No group layer rects to process, don't do anything
 			if (groupRects == null)
 				return;
+
 			var evt = Event.current;
 
-			if (scrollViewRect.Contains(evt.mousePosition) == false)
+			// Automatically Reject non mouse button 1 events
+			if (evt.button != 0 || !evt.isMouse)
 				return;
 
-			if (evt.type != EventType.MouseUp || evt.button != 0)
+			switch (evt.type)
+			{
+				case EventType.MouseDown:
+					break;
+				case EventType.MouseDrag:
+					HandleBeginDrag(evt);
+					break;
+				case EventType.MouseUp:
+					// Clear drag data, if any on mouseup
+					DragAndDrop.PrepareStartDrag();
+					isDragging = false;
+					HandleGroupSelect(evt);
+					break;
+			}
+		}
+
+		private void HandleGroupSelect(Event evt)
+		{
+			if (scrollViewRect.Contains(evt.mousePosition) == false)
 				return;
 
 			bool didLayerClick = false;
@@ -234,6 +278,73 @@ namespace subjectnerdagreement.psdexport
 				Repaint();
 			}
 		}
+
+		private void HandleBeginDrag(Event evt)
+		{
+			if (scrollViewRect.Contains(evt.mousePosition) == false)
+				return;
+
+			foreach (KeyValuePair<PSDLayerGroupInfo, Rect> keypair in groupRects)
+			{
+				var targetRect = keypair.Value;
+				targetRect.x += scrollViewRect.x - scrollPos.x;
+				targetRect.y += scrollViewRect.y - scrollPos.y;
+
+				if (targetRect.Contains(evt.mousePosition))
+				{
+					selectedGroup = keypair.Key;
+					Repaint();
+
+					DragAndDrop.PrepareStartDrag();
+
+					DragAndDrop.paths = new string[0];
+					DragAndDrop.objectReferences = new Object[0];
+
+					DragAndDrop.StartDrag("Create PSD Group");
+					evt.Use();
+
+					isDragging = true;
+					Debug.LogFormat("Dragging {0}", keypair.Key.name);
+					return;
+				}
+			}
+		}
+
+		private void HandleHierarchyItem(int instanceId, Rect selectionRect)
+		{
+			if (!isDragging || selectedGroup == null)
+				return;
+			
+			if (selectionRect.Contains(Event.current.mousePosition))
+			{
+				DragAndDrop.visualMode = DragAndDropVisualMode.Link;
+
+				if (Event.current.type == EventType.DragPerform)
+				{
+					var obj = EditorUtility.InstanceIDToObject(instanceId);
+					GameObject targetObject = (GameObject) obj;
+
+					if (targetObject == null)
+						return;
+
+					DragAndDrop.AcceptDrag();
+					isDragging = false;
+
+					var canvas = targetObject.GetComponentInParent<Canvas>();
+					bool isUi = (canvas != null);
+
+					if (isUi)
+					{
+						PsdBuilder.BuildToUi(targetObject, selectedGroup, settings, fileInfo, createAlign);
+					}
+					else
+					{
+						PsdBuilder.BuildToSprites(targetObject, selectedGroup, settings, fileInfo, createAlign);
+					}
+				}
+			}
+		}
+		#endregion
 
 		#region PSD Layer display functions
 		private Vector2 scrollPos = Vector2.zero;

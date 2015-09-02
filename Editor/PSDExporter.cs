@@ -61,8 +61,8 @@ namespace subjectnerdagreement.psdexport
 			int exportCount = 0;
 			foreach (int layerIndex in  layerIndices)
 			{
-				string infoString = string.Format("Exporting {0} / {1} Layers", exportCount, layerIndices.Count);
-				string fileString = string.Format("Exporting PSD Layers: {0}", settings.Filename);
+				string infoString = string.Format("Importing {0} / {1} Layers", exportCount, layerIndices.Count);
+				string fileString = string.Format("Importing PSD Layers: {0}", settings.Filename);
 
 				float progress = exportCount/(float) layerIndices.Count;
 

@@ -176,7 +176,10 @@ namespace subjectnerdagreement.psdexport
 
 		public void Setup()
 		{
-			titleContent = new GUIContent("PSD Importer");
+			titleContent = new GUIContent("PSD Importer")
+			{
+				image = EditorGUIUtility.FindTexture("Texture Icon")
+			};
 			EditorApplication.hierarchyWindowItemOnGUI += HandleHierarchyItem;
 
 			/*
@@ -352,16 +355,38 @@ namespace subjectnerdagreement.psdexport
 
 		private Dictionary<PSDLayerGroupInfo, Rect> DrawPsdLayers()
 		{
-			EditorGUILayout.Space();
-			EditorGUILayout.LabelField("Layers", styleHeader);
+			using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
+			{
+				EditorGUILayout.LabelField("Layers", styleHeader);
+			}
 
 			// Headers
-			EditorGUILayout.BeginHorizontal();
-			GUILayout.Space(30f);
-			GUILayout.Label("Name");
-			GUILayout.Label("Size", GUILayout.MaxWidth(70f), GUILayout.MinWidth(70f));
-			GUILayout.Label("Pivot", GUILayout.MaxWidth(70f), GUILayout.MinWidth(70f));
-			EditorGUILayout.EndHorizontal();
+			using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
+			{
+				float labelSize = (position.width - (colPivot + colSize));
+				labelSize = Mathf.Max(labelSize, 145f);
+
+				using (new EditorGUILayout.HorizontalScope(GUILayout.Width(labelSize)))
+				{
+					//GUILayout.FlexibleSpace();
+					GUILayout.Label("Name");
+					//GUILayout.FlexibleSpace();
+				}
+
+				using (new EditorGUILayout.HorizontalScope(GUILayout.Width(colSize)))
+				{
+					//GUILayout.FlexibleSpace();
+					GUILayout.Label("Size");
+					//GUILayout.FlexibleSpace();
+				}
+
+				using (new EditorGUILayout.HorizontalScope(GUILayout.Width(colPivot)))
+				{
+					//GUILayout.FlexibleSpace();
+					GUILayout.Label("Pivot");
+					//GUILayout.FlexibleSpace();
+				}
+			}
 
 			scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 
@@ -525,6 +550,11 @@ namespace subjectnerdagreement.psdexport
 			settings.layerSettings[layerIndex].doExport = fileInfo.LayerVisibility[layerIndex] && parentVisible;
 		}
 
+		private const float colSize = 60f;
+		private const float colPivot = 95f;
+		private const float colVisible = 15f;
+		private const float indentSize = 20f;
+
 		private bool DrawLayerEntry(Layer layer, int layerIndex, int indentLevel, bool parentVisible)
 		{
 			var drawStyle = styleLayerNormal;
@@ -535,9 +565,14 @@ namespace subjectnerdagreement.psdexport
 			EditorGUILayout.BeginHorizontal(drawStyle);
 
 			// Draw layer visibility toggle
-			bool visToggle = EditorGUILayout.Toggle(fileInfo.LayerVisibility[layerIndex], GUILayout.MaxWidth(15f));
+			bool visToggle = EditorGUILayout.Toggle(fileInfo.LayerVisibility[layerIndex],
+													GUILayout.Width(colVisible));
 
-			GUILayout.Space(indentLevel * 20f);
+			float indentAmount = indentLevel*indentSize;
+			GUILayout.Space(indentAmount);
+
+			float labelSize = (position.width - indentAmount - (colPivot + colSize) - 50f);
+			labelSize = Mathf.Max(labelSize, 125f);
 
 			// Draw the layer name
 			GUIContent layerDisplay = new GUIContent()
@@ -545,7 +580,9 @@ namespace subjectnerdagreement.psdexport
 				image = icnTexture,
 				text = layer.Name
 			};
-			EditorGUILayout.LabelField(layerDisplay, styleLabelLeft, GUILayout.ExpandWidth(true));
+			EditorGUILayout.LabelField(layerDisplay, styleLabelLeft,
+											GUILayout.Width(labelSize),
+											GUILayout.ExpandWidth(true));
 
 			fileInfo.LayerVisibility[layerIndex] = visToggle;
 
@@ -555,11 +592,9 @@ namespace subjectnerdagreement.psdexport
 			if (layerSetting.doExport)
 			{
 				layerSetting.scaleBy = (PSDExporter.ScaleDown)EditorGUILayout.EnumPopup(layerSetting.scaleBy,
-																				GUILayout.MaxWidth(70f),
-																				GUILayout.MinWidth(70f));
+																			GUILayout.Width(colSize));
 				layerSetting.pivot = (SpriteAlignment)EditorGUILayout.EnumPopup(layerSetting.pivot,
-																				GUILayout.MaxWidth(70f),
-																				GUILayout.MinWidth(70f));
+																			GUILayout.Width(colPivot));
 				settings.layerSettings[layerIndex] = layerSetting;
 			}
 
@@ -580,9 +615,10 @@ namespace subjectnerdagreement.psdexport
 			EditorGUILayout.BeginHorizontal(style);
 
 			// Draw group visibility toggle
-			bool visToggle = EditorGUILayout.Toggle(groupInfo.visible, GUILayout.MaxWidth(15f));
+			bool visToggle = EditorGUILayout.Toggle(groupInfo.visible, GUILayout.Width(colVisible));
 
-			GUILayout.Space(indentLevel * 20f);
+			float indentAmount = indentLevel * indentSize;
+			GUILayout.Space(indentAmount);
 
 			// Draw the layer group name
 			GUIContent groupDisplay = new GUIContent()
@@ -729,6 +765,7 @@ namespace subjectnerdagreement.psdexport
 			if (!showCreateSprites || !imageLoaded)
 				return;
 
+			float labelWidth = EditorGUIUtility.labelWidth;
 			using (new EditorGUILayout.HorizontalScope(GUILayout.Height(30f)))
 			{
 				MessageType boxType = MessageType.Warning;
@@ -736,21 +773,27 @@ namespace subjectnerdagreement.psdexport
 
 				if (selectedGroup != null)
 				{
-					boxMsg = string.Format("Creating Group: {0}", selectedGroup.name);
+					boxMsg = string.Format("Creating: {0}", selectedGroup.name);
 					boxType = MessageType.Info;
 				}
 
 				EditorGUILayout.HelpBox(boxMsg, boxType);
+
+				using (new EditorGUILayout.VerticalScope(GUILayout.Width(165f)))
+				{
+					GUILayout.FlexibleSpace();
+					EditorGUIUtility.labelWidth = 65f;
+					createAlign = (SpriteAlignment)EditorGUILayout.EnumPopup("Alignment", createAlign);
+					GUILayout.FlexibleSpace();	
+				}
 			}
 
-			using (new EditorGUILayout.HorizontalScope())
-			{
-				createAlign = (SpriteAlignment)EditorGUILayout.EnumPopup("Creation Alignment", createAlign);
-			}
+			GUILayout.Space(5f);
 
 			bool createSprites = false;
 			bool createUiImgs = false;
 
+			EditorGUIUtility.labelWidth = labelWidth;
 			using (new EditorGUILayout.HorizontalScope())
 			{
 				if (selectedGroup == null)

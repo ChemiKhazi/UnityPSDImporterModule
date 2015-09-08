@@ -195,8 +195,8 @@ namespace subjectnerdagreement.psdexport
 			if (settings.Pivot != layerSetting.pivot)
 				importSetting.spriteAlignment = (int)layerSetting.pivot;
 			// Pivot settings are the same but custom, set the vector
-			else if (settings.Pivot == SpriteAlignment.Custom)
-				importSetting.spritePivot = settings.PivotVector;
+			//else if (settings.Pivot == SpriteAlignment.Custom)
+			//	importSetting.spritePivot = settings.PivotVector;
 
 			importSetting.spritePixelsPerUnit = pixelsToUnits;
 			// Set the rest of the texture settings

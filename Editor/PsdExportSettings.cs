@@ -258,6 +258,7 @@ namespace subjectnerdagreement.psdexport
 				string[] pivotNameStrings = Enum.GetNames(typeof(SpriteAlignment));
 				Array pivotNameVals = Enum.GetValues(typeof(SpriteAlignment));
 
+				// Layer import size is stored via tags
 				string[] labels = AssetDatabase.GetLabels(layerSprite);
 				foreach (var label in labels)
 				{
@@ -267,19 +268,18 @@ namespace subjectnerdagreement.psdexport
 						setting.scaleBy = PSDExporter.ScaleDown.Half;
 					if (label.Equals(TagImport4))
 						setting.scaleBy = PSDExporter.ScaleDown.Quarter;
-
-					if (label.StartsWith(TagImportAnchor))
-					{
-						string pivotType = label.Substring(12);
-						// Find by enum
-						for (int i = 0; i < pivotNameStrings.Length; i++)
-						{
-							if (pivotType == pivotNameStrings[i])
-								setting.pivot = (SpriteAlignment)pivotNameVals.GetValue(i);
-						}
-					} // End import anchor if
 				} // End label loop
-			} // End sprite label loading
+
+				// Anchor is determined by import settings
+
+				// Get the texture importer for the asset
+				TextureImporter textureImporter = (TextureImporter)AssetImporter.GetAtPath(layerPath);
+				// Read out the texture import settings so import pivot point can be changed
+				TextureImporterSettings importSetting = new TextureImporterSettings();
+				textureImporter.ReadTextureSettings(importSetting);
+
+				setting.pivot = (SpriteAlignment) importSetting.spriteAlignment;
+			} // End layer settings loading
 
 			layerSettings.Add(layerIndex, setting);
 		}
@@ -307,7 +307,8 @@ namespace subjectnerdagreement.psdexport
 				return;
 
 			// Write out the labels for the layer settings
-			string[] labels = new string[2];
+			// layer settings is just import size
+			string[] labels = new string[1];
 
 			if (setting.scaleBy == PSDExporter.ScaleDown.Default)
 				labels[0] = TagImport1;
@@ -316,9 +317,26 @@ namespace subjectnerdagreement.psdexport
 			if (setting.scaleBy == PSDExporter.ScaleDown.Quarter)
 				labels[0] = TagImport4;
 
-			labels[1] = TagImportAnchor + setting.pivot;
-
+			// Write the label for the texture
 			AssetDatabase.SetLabels(layerSprite, labels);
+
+			// Set the alignment for the texture
+
+			// Get the texture importer for the asset
+			TextureImporter textureImporter = (TextureImporter)AssetImporter.GetAtPath(layerPath);
+			// Read out the texture import settings so import pivot point can be changed
+			TextureImporterSettings importSetting = new TextureImporterSettings();
+			textureImporter.ReadTextureSettings(importSetting);
+
+			// Set the alignment
+			importSetting.spriteAlignment = (int) setting.pivot;
+
+			// And write settings into the importer
+			textureImporter.SetTextureSettings(importSetting);
+
+			EditorUtility.SetDirty(layerSprite);
+			AssetDatabase.WriteImportSettingsIfDirty(layerPath);
+			AssetDatabase.ImportAsset(layerPath, ImportAssetOptions.ForceUpdate);
 		}
 
 		public string GetLayerPath(string layerName)

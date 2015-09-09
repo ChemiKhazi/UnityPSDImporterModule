@@ -676,7 +676,7 @@ namespace subjectnerdagreement.psdexport
 			GUILayout.Label("Source Image Scale");
 			settings.ScaleBy = GUILayout.Toolbar(settings.ScaleBy, new string[] { "1X", "2X", "4X" });
 
-			settings.AutoReExport = EditorGUILayout.Toggle("Auto Re-Export", settings.AutoReExport);
+			settings.AutoReImport = EditorGUILayout.Toggle("Auto Re-Import", settings.AutoReImport);
 
 			settings.PixelsToUnitSize = EditorGUILayout.FloatField("Pixels To Unit Size", settings.PixelsToUnitSize);
 			if (settings.PixelsToUnitSize <= 0)

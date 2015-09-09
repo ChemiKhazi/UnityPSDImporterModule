@@ -35,20 +35,20 @@ namespace subjectnerdagreement.psdexport
 			{
 				// So instead, hook into the editor update function
 				// and fire the import from there
-				EditorApplication.update += WaitForImport;
+				EditorApplication.update += ExecuteAutoImport;
 			}
 		}
 
-		private static void WaitForImport()
+		private static void ExecuteAutoImport()
 		{
 			// This function only fires once, unhook from update function immediately
-			EditorApplication.update -= WaitForImport;
+			EditorApplication.update -= ExecuteAutoImport;
 
 			for (int i = 0; i < reimports.Count; i++)
 			{
 				var target = reimports[i];
 				var exportSettings = new PsdExportSettings(target);
-				if (exportSettings.AutoReExport)
+				if (exportSettings.AutoReImport)
 				{
 					PsdFileInfo psdInfo = new PsdFileInfo(exportSettings.Psd);
 					exportSettings.LoadLayers(psdInfo);

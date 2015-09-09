@@ -70,7 +70,7 @@ namespace subjectnerdagreement.psdexport
 
 		public string ExportPath { get; set; }
 
-		public bool AutoReExport { get; set; }
+		public bool AutoReImport { get; set; }
 
 		public bool HasMetaData { get; protected set; }
 
@@ -133,7 +133,7 @@ namespace subjectnerdagreement.psdexport
 
 		private void LoadMetaData()
 		{
-			AutoReExport = false;
+			AutoReImport = false;
 			string[] pivotNameStrings = Enum.GetNames(typeof(SpriteAlignment));
 			Array pivotNameVals = Enum.GetValues(typeof(SpriteAlignment));
 
@@ -192,13 +192,13 @@ namespace subjectnerdagreement.psdexport
 				}
 
 				if (label.StartsWith(TagExportAuto))
-					AutoReExport = true;
+					AutoReImport = true;
 			} // End label loop
 		}
 
 		public void SaveMetaData()
 		{
-			int tagCount = AutoReExport ? 6 : 5;
+			int tagCount = AutoReImport ? 6 : 5;
 			string[] labels = new string[tagCount];
 
 			if (ScaleBy == 0)
@@ -218,7 +218,7 @@ namespace subjectnerdagreement.psdexport
 			labels[3] = TagImportPack + PackingTag;
 			labels[4] = TagExportPath + ExportPath;
 
-			if (AutoReExport)
+			if (AutoReImport)
 				labels[5] = TagExportAuto;
 
 			AssetDatabase.SetLabels(Image, labels);

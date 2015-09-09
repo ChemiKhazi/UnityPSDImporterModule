@@ -307,7 +307,6 @@ namespace subjectnerdagreement.psdexport
 					evt.Use();
 
 					isDragging = true;
-					Debug.LogFormat("Dragging {0}", keypair.Key.name);
 					return;
 				}
 			}

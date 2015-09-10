@@ -107,7 +107,9 @@ namespace subjectnerdagreement.psdexport
 					{
 						// If start or end of the group, call HandleGroupObject
 						// which creates the group layer object and assignment of lastParent
-						HandleGroupObject(groupInfo, groupHeaders, startGroup, ref lastParent, objectFactory);
+						HandleGroupObject(groupInfo, groupHeaders,
+										startGroup, isSprite,
+										ref lastParent, objectFactory);
 
 						// A bunch of book keeping needs to be done at the start of a group
 						if (startGroup)
@@ -197,8 +199,12 @@ namespace subjectnerdagreement.psdexport
 				var groupObject = groups[grpIndex];
 				if (groupObject == null)
 					continue;
-				
+
 				Transform groupT = groupObject.transform;
+
+				// Store the sibling index, order important for UI
+				// reconstruction that was established earlier
+				int siblingIndex = groupT.GetSiblingIndex();
 
 				// Get the position from the root pos function
 				Vector3 groupPos = getRootPosition(groupObject, align);
@@ -206,19 +212,22 @@ namespace subjectnerdagreement.psdexport
 				// Create a new object
 				GameObject newRoot = objectFactory(groupObject.name, groupObject);
 
-				// Reparent new object
+				// Reparent new object to same parent as old group object
 				Transform newRootT = newRoot.transform;
 				newRootT.SetParent(groupT.parent);
+
+				// Take over the sibling index of the old group object
+				newRootT.SetSiblingIndex(siblingIndex);
 
 				// Reposition the new object
 				newRootT.position = groupPos;
 
 				// Reparent the children from the old root object to new root
-				while (groupT.childCount>0)
+				while (groupT.childCount > 0)
 				{
 					groupT.GetChild(0).SetParent(newRootT, true);
 				}
-				
+
 				// If the group we're handling is rootBaseT, position the
 				// replacement group header over old root
 				if (groupT == rootBaseT)
@@ -228,12 +237,13 @@ namespace subjectnerdagreement.psdexport
 
 				// Destroy the old root
 				Object.DestroyImmediate(groups[grpIndex]);
-			}
+			} // End reposition loop
+
 		} // End BuildPsd()
 
 		private static void HandleGroupObject(PSDLayerGroupInfo groupInfo,
 						Dictionary<PSDLayerGroupInfo, GameObject> groupHeaders,
-						bool startGroup, ref GameObject lastParent,
+						bool startGroup, bool isSprite, ref GameObject lastParent,
 						Func<string, GameObject, GameObject> objectCreator)
 		{
 			if (startGroup)
@@ -248,9 +258,21 @@ namespace subjectnerdagreement.psdexport
 			{
 				var header = groupHeaders[groupInfo].transform;
 				if (header.parent != null)
+				{
+					Debug.LogFormat("Closing Group: {0}, isSprite: {1}",
+									groupInfo.name, isSprite);
+
+					// When closing a group during UI image reconstruction,
+					// Set the group as the first sibling to preserve layer order
+					if (!isSprite)
+						lastParent.transform.SetAsFirstSibling();
+
 					lastParent = groupHeaders[groupInfo].transform.parent.gameObject;
+				}
 				else
+				{
 					lastParent = null;
+				}
 			}
 		}
 		#endregion

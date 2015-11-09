@@ -38,10 +38,13 @@ namespace subjectnerdagreement.psdexport
 			return GOFactory(name, parent);
 		}
 
-		public void AddComponents(int layerIndex, GameObject spriteObject, Sprite sprite, TextureImporterSettings settings)
+		public void AddComponents(int layerIndex, GameObject imageObject, Sprite sprite, TextureImporterSettings settings)
 		{
-			var spr = spriteObject.AddComponent<SpriteRenderer>();
+			var spr = imageObject.AddComponent<SpriteRenderer>();
 			spr.sprite = sprite;
+			// If setting the sorting order is as simple as setting a sorting number,
+			// do it here. Note that UiImgConstructor is more complex because of how
+			// Unity UI uses the hierarchy position for sorting
 			spr.sortingOrder = layerIndex;
 		}
 

@@ -23,9 +23,9 @@ namespace subjectnerdagreement.psdexport
 			return go;
 		}
 
-		public void AddComponents(int layerIndex, GameObject spriteObject, Sprite sprite, TextureImporterSettings settings)
+		public void AddComponents(int layerIndex, GameObject imageObject, Sprite sprite, TextureImporterSettings settings)
 		{
-			var uiImg = spriteObject.AddComponent<Image>();
+			var uiImg = imageObject.AddComponent<Image>();
 
 			uiImg.sprite = sprite;
 			uiImg.SetNativeSize();

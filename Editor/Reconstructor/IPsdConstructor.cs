@@ -11,7 +11,7 @@ namespace subjectnerdagreement.psdexport
 		string MenuName { get; }
 
 		/// <summary>
-		/// Returns if the constructor can build in the given selection
+		/// Returns if the constructor can build in the given hierarchy selection
 		/// </summary>
 		/// <param name="hierarchySelection"></param>
 		/// <returns></returns>
@@ -30,10 +30,10 @@ namespace subjectnerdagreement.psdexport
 		/// Add the components that make up an image
 		/// </summary>
 		/// <param name="layerIndex">Layer depth/sorting order</param>
-		/// <param name="spriteObject"></param>
-		/// <param name="sprite"></param>
+		/// <param name="imageObject">Parent object of the image</param>
+		/// <param name="sprite">The Unity sprite to display on this image</param>
 		/// <param name="settings"></param>
-		void AddComponents(int layerIndex, GameObject spriteObject, Sprite sprite, TextureImporterSettings settings);
+		void AddComponents(int layerIndex, GameObject imageObject, Sprite sprite, TextureImporterSettings settings);
 
 		/// <summary>
 		/// Do something when a layer group starts

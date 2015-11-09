@@ -23,6 +23,7 @@ The following is pseudo code for how the PSD is recreated. This is found in [`Ps
 // In this loop, the PSD is recreated without regard
 // for the chosen alignment
 for (lowestLayer to highestLayer)
+{
   if (layer is inside a layer group)
   {
     if (start or end of layer group)
@@ -31,6 +32,7 @@ for (lowestLayer to highestLayer)
       {
         IPsdConstructor.CreatGameObject();
         IPsdConstructor.HandleGroupOpen();
+        set as current layer group
       }
       else
       {
@@ -39,13 +41,15 @@ for (lowestLayer to highestLayer)
       }
       continue;
     }
+  } //
 
-    // Visible image layers
-    IPsdConstructor.CreatGameObject();
-    IPsdConstructor.AddComponents();
-    IPsdConstructor.GetLayerPosition();
-    Add layer to layer group
-  }
+  // Visible image layers
+  IPsdConstructor.CreatGameObject();
+  Add layer to current layer group
+
+  IPsdConstructor.AddComponents();
+  IPsdConstructor.GetLayerPosition();
+}
 
 // This loop repositions the PSD so that layer groups
 // are positioned according to chosen alignment

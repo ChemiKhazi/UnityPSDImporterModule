@@ -26,7 +26,6 @@ using System;
 using System.Reflection;
 using PhotoshopFile;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -87,6 +86,13 @@ namespace subjectnerdagreement.psdexport
 
 		private bool isDragging;
 
+		private int extIndex = -1;
+		private UiImgConstructor uiConstructor;
+		private SpriteConstructor spriteConstructor;
+		private IPsdConstructor[] constructorExtensions = null;
+		private GUIContent[] constructorNames;
+		private GUIContent extLabel = new GUIContent("Create with Extension");
+
 		public Texture2D Image
 		{
 			get { return image; }
@@ -99,9 +105,41 @@ namespace subjectnerdagreement.psdexport
 
 		void OnEnable()
 		{
+			BuildConstructorExtensions();
 			SetupSortingLayerNames();
 			if (image != null)
 				LoadImage();
+		}
+
+		void BuildConstructorExtensions()
+		{
+			uiConstructor = new UiImgConstructor();
+			spriteConstructor = new SpriteConstructor();
+
+			Type targetType = typeof(IPsdConstructor);
+			Type sprType = typeof(SpriteConstructor);
+			Type uiType = typeof(UiImgConstructor);
+			Type[] constructorTypes = AppDomain.CurrentDomain.GetAssemblies()
+				.SelectMany(s => s.GetTypes())
+				.Where(p => targetType.IsAssignableFrom(p) && p.IsClass &&
+						!(p == sprType || p == uiType))
+				.ToArray();
+
+			List<IPsdConstructor> constructors = new List<IPsdConstructor>();
+			List<GUIContent> constructNames = new List<GUIContent>();
+
+			foreach (Type t in constructorTypes)
+			{
+				IPsdConstructor constructor = Activator.CreateInstance(t) as IPsdConstructor;
+				if (constructor == null)
+					continue;
+
+				constructors.Add(constructor);
+				constructNames.Add(new GUIContent(constructor.MenuName));
+			}
+
+			constructorExtensions = constructors.ToArray();
+			constructorNames = constructNames.ToArray();
 		}
 
 		void SetupSortingLayerNames()
@@ -210,7 +248,6 @@ namespace subjectnerdagreement.psdexport
 		{
 			SetupStyles();
 
-			Vector2 size = new Vector2(150f, 100f);
 			imageLoaded = (image != null && settings.Psd != null);
 
 			// Draw the layers, store where the layer groups are
@@ -337,11 +374,11 @@ namespace subjectnerdagreement.psdexport
 
 					if (isUi)
 					{
-						PsdBuilder.BuildToUi(targetObject, selectedGroup, settings, fileInfo, createAlign);
+						PsdBuilder.BuildUiImages(targetObject, selectedGroup, settings, fileInfo, createAlign);
 					}
 					else
 					{
-						PsdBuilder.BuildToSprites(targetObject, selectedGroup, settings, fileInfo, createAlign);
+						PsdBuilder.BuildSprites(targetObject, selectedGroup, settings, fileInfo, createAlign);
 					}
 				}
 			}
@@ -810,16 +847,11 @@ namespace subjectnerdagreement.psdexport
 
 				using (new EditorGUILayout.VerticalScope())
 				{
-					// Check if selection passes 
 					bool selectionOk = Selection.activeGameObject != null;
 					string btnText = "Select UI Root";
-
-					// Something is being selected, check if selection
-					// is part of UI
 					if (selectionOk)
 					{
-						var checkCanvas = Selection.activeGameObject.GetComponentInParent<Canvas>();
-						selectionOk = (checkCanvas != null);
+						selectionOk = uiConstructor.CanBuild(Selection.activeGameObject);
 						if (selectionOk)
 							btnText = "Create UI Images";
 					}
@@ -835,9 +867,45 @@ namespace subjectnerdagreement.psdexport
 			}
 
 			if (createSprites)
-				PsdBuilder.BuildToSprites(Selection.activeGameObject, selectedGroup, settings, fileInfo, createAlign);
+				PsdBuilder.BuildPsd(Selection.activeGameObject, selectedGroup, settings, fileInfo, createAlign, spriteConstructor);
 			if (createUiImgs)
-				PsdBuilder.BuildToUi(Selection.activeGameObject, selectedGroup, settings, fileInfo, createAlign);
+				PsdBuilder.BuildPsd(Selection.activeGameObject, selectedGroup, settings, fileInfo, createAlign, uiConstructor);
+
+			DrawCreateExtensions();
+		}
+
+		private void DrawCreateExtensions()
+		{
+			if (constructorExtensions.Length == 0)
+				return;
+
+			GUI.enabled = selectedGroup != null;
+
+			bool doCreate;
+
+			using (new EditorGUILayout.HorizontalScope(GUILayout.Height(30f)))
+			{
+				extIndex = EditorGUILayout.Popup(extLabel, extIndex, constructorNames);
+
+				bool canBuild = false;
+				GUIContent createBtn = GUIContent.none;
+				if (extIndex > -1 && extIndex < constructorExtensions.Length)
+				{
+					createBtn = constructorNames[extIndex];
+					canBuild = constructorExtensions[extIndex].CanBuild(Selection.activeGameObject);
+				}
+
+				GUI.enabled = canBuild && selectedGroup != null;
+				doCreate = GUILayout.Button(createBtn, GUILayout.ExpandHeight(true));
+			}
+
+			if (doCreate)
+			{
+				IPsdConstructor constructor = constructorExtensions[extIndex];
+				PsdBuilder.BuildPsd(Selection.activeGameObject, selectedGroup, settings, fileInfo, createAlign, constructor);
+			}
+
+			GUI.enabled = true;
 		}
 		#endregion
 	}

@@ -4,37 +4,34 @@ using System.Linq;
 using PhotoshopFile;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace subjectnerdagreement.psdexport
 {
 	public class PsdBuilder
 	{
-		public static void BuildToUi(GameObject root, PSDLayerGroupInfo group,
+		#region convenience functions
+		public static void BuildUiImages(GameObject root, PSDLayerGroupInfo group,
 									PsdExportSettings settings, PsdFileInfo fileInfo,
 									SpriteAlignment createAlign)
 		{
-			BuildPsd(root, false, createAlign,
-					group, settings, fileInfo,
-					CreateUiGO, UiImgCreator, UiGetGroupPos);
+			BuildPsd(root, group, settings, fileInfo,
+					createAlign, new UiImgConstructor());
 		}
 
-		public static void BuildToSprites(GameObject root, PSDLayerGroupInfo group,
+		public static void BuildSprites(GameObject root, PSDLayerGroupInfo group,
 										PsdExportSettings settings, PsdFileInfo fileInfo,
 										SpriteAlignment createAlign)
 		{
-			BuildPsd(root, true, createAlign,
-					group, settings, fileInfo,
-					CreateSpriteGO, SpriteCreator, SprGetGroupPos);
+			BuildPsd(root, group, settings, fileInfo,
+					createAlign, new SpriteConstructor());
 		}
+		#endregion
 
 		#region General handler
-		private static void BuildPsd(GameObject root, bool isSprite, SpriteAlignment align,
-									PSDLayerGroupInfo group, PsdExportSettings settings, PsdFileInfo fileInfo,
-									Func<string, GameObject, GameObject> objectFactory,
-									Action<int, GameObject, Sprite, TextureImporterSettings> componentFactory,
-									Func<GameObject, SpriteAlignment, Vector3> getRootPosition)
+		public static void BuildPsd(GameObject root, PSDLayerGroupInfo group,
+									PsdExportSettings settings, PsdFileInfo fileInfo,
+									SpriteAlignment align, IPsdConstructor constructor)
 		{
 			// Run the export on non exported layers
 			PSDExporter.Export(settings, fileInfo, false);
@@ -108,8 +105,7 @@ namespace subjectnerdagreement.psdexport
 						// If start or end of the group, call HandleGroupObject
 						// which creates the group layer object and assignment of lastParent
 						HandleGroupObject(groupInfo, groupHeaders,
-										startGroup, isSprite,
-										ref lastParent, objectFactory);
+										startGroup, constructor, ref lastParent);
 
 						// A bunch of book keeping needs to be done at the start of a group
 						if (startGroup)
@@ -144,7 +140,7 @@ namespace subjectnerdagreement.psdexport
 				Layer layer = settings.Psd.Layers[i];
 
 				// Create the game object for the sprite
-				GameObject spriteObject = objectFactory(layer.Name, lastParent);
+				GameObject spriteObject = constructor.CreateGameObject(layer.Name, lastParent);
 
 				// Reparent created object to last parent
 				if (lastParent != null)
@@ -161,19 +157,14 @@ namespace subjectnerdagreement.psdexport
 				sprImporter = null;
 
 				// Add components to the sprite object for the visuals
-				componentFactory(i, spriteObject, sprite, sprSettings);
+				constructor.AddComponents(i, spriteObject, sprite, sprSettings);
 
 				Transform spriteT = spriteObject.transform;
 
 				// Reposition the sprite object according to PSD position
 				Vector2 spritePivot = GetPivot(sprSettings);
 
-				Vector3 layerPos = Vector3.zero;
-				layerPos.x = ((layer.Rect.width * spritePivot.x) + layer.Rect.x);
-				layerPos.y = (-(layer.Rect.height * (1 - spritePivot.y)) - layer.Rect.y);
-
-				if (isSprite)
-					layerPos /= settings.PixelsToUnitSize;
+				Vector3 layerPos = constructor.GetLayerPosition(layer.Rect, spritePivot, settings.PixelsToUnitSize);
 
 				// Scaling factor, if sprites were scaled down
 				float posScale = 1f;
@@ -207,10 +198,10 @@ namespace subjectnerdagreement.psdexport
 				int siblingIndex = groupT.GetSiblingIndex();
 
 				// Get the position from the root pos function
-				Vector3 groupPos = getRootPosition(groupObject, align);
+				Vector3 groupPos = constructor.GetGroupPosition(groupObject, align);
 
 				// Create a new object
-				GameObject newRoot = objectFactory(groupObject.name, groupObject);
+				GameObject newRoot = constructor.CreateGameObject(groupObject.name, groupObject);
 
 				// Reparent new object to same parent as old group object
 				Transform newRootT = newRoot.transform;
@@ -242,71 +233,46 @@ namespace subjectnerdagreement.psdexport
 		} // End BuildPsd()
 
 		private static void HandleGroupObject(PSDLayerGroupInfo groupInfo,
-						Dictionary<PSDLayerGroupInfo, GameObject> groupHeaders,
-						bool startGroup, bool isSprite, ref GameObject lastParent,
-						Func<string, GameObject, GameObject> objectCreator)
+									Dictionary<PSDLayerGroupInfo, GameObject> groupHeaders,
+									bool startGroup, IPsdConstructor constructor,
+									ref GameObject lastParent)
 		{
 			if (startGroup)
 			{
-				GameObject groupRoot = objectCreator(groupInfo.name, lastParent);
+				GameObject groupRoot = constructor.CreateGameObject(groupInfo.name, lastParent);
+				constructor.HandleGroupOpen(groupRoot);
 
 				lastParent = groupRoot;
 				groupHeaders.Add(groupInfo, groupRoot);
+				return;
 			}
+
 			// If not startGroup, closing group
+			var header = groupHeaders[groupInfo].transform;
+			if (header.parent != null)
+			{
+				constructor.HandleGroupClose(lastParent);
+
+				lastParent = groupHeaders[groupInfo].transform.parent.gameObject;
+			}
 			else
 			{
-				var header = groupHeaders[groupInfo].transform;
-				if (header.parent != null)
-				{
-					Debug.LogFormat("Closing Group: {0}, isSprite: {1}",
-									groupInfo.name, isSprite);
-
-					// When closing a group during UI image reconstruction,
-					// Set the group as the first sibling to preserve layer order
-					if (!isSprite)
-						lastParent.transform.SetAsFirstSibling();
-
-					lastParent = groupHeaders[groupInfo].transform.parent.gameObject;
-				}
-				else
-				{
-					lastParent = null;
-				}
+				lastParent = null;
 			}
 		}
 		#endregion
 
-		#region Object factories
-		private static GameObject CreateSpriteGO(string name, GameObject parent)
+		#region Public APIs
+
+		public static Vector3 CalculateLayerPosition(Rect layerSize, Vector2 layerPivot)
 		{
-			GameObject spriteGO = new GameObject(name);
-			Transform spriteT = spriteGO.transform;
-
-			if (parent != null)
-			{
-				spriteT.SetParent(parent.transform);
-				spriteGO.layer = parent.layer;
-				spriteGO.tag = parent.tag;
-			}
-
-			spriteT.localPosition = Vector3.zero;
-			spriteT.localScale = Vector3.one;
-
-			return spriteGO;
+			Vector3 layerPos = Vector3.zero;
+			layerPos.x = ((layerSize.width * layerPivot.x) + layerSize.x);
+			layerPos.y = (-(layerSize.height * (1 - layerPivot.y)) - layerSize.y);
+			return layerPos;
 		}
 
-		private static GameObject CreateUiGO(string name, GameObject parent)
-		{
-			GameObject uiGO = CreateSpriteGO(name, parent);
-			uiGO.AddComponent<RectTransform>();
-			return uiGO;
-		}
-		#endregion
-
-		#region Sprite factories
-
-		private static Vector2 GetPivot(SpriteAlignment spriteAlignment)
+		public static Vector2 GetPivot(SpriteAlignment spriteAlignment)
 		{
 			Vector2 pivot = new Vector2(0.5f, 0.5f);
 			if (spriteAlignment == SpriteAlignment.TopLeft ||
@@ -336,86 +302,13 @@ namespace subjectnerdagreement.psdexport
 			return pivot;
 		}
 
-		private static Vector2 GetPivot(TextureImporterSettings sprSettings)
+		public static Vector2 GetPivot(TextureImporterSettings sprSettings)
 		{
 			SpriteAlignment align = (SpriteAlignment) sprSettings.spriteAlignment;
 			if (align == SpriteAlignment.Custom)
 				return sprSettings.spritePivot;
 			return GetPivot(align);
 		}
-
-		private static void SpriteCreator(int index, GameObject sprObj, Sprite sprite, TextureImporterSettings sprSettings)
-		{
-			var spr = sprObj.AddComponent<SpriteRenderer>();
-			spr.sprite = sprite;
-			spr.sortingOrder = index;
-		}
-
-		private static void UiImgCreator(int index, GameObject sprObj, Sprite sprite, TextureImporterSettings sprSettings)
-		{
-			var uiImg = sprObj.AddComponent<Image>();
-
-			uiImg.sprite = sprite;
-			uiImg.SetNativeSize();
-			uiImg.rectTransform.SetAsFirstSibling();
-
-			Vector2 sprPivot = GetPivot(sprSettings);
-			uiImg.rectTransform.pivot = sprPivot;
-		}
 		#endregion
-
-		private static Vector3 SprGetGroupPos(GameObject groupRoot, SpriteAlignment alignment)
-		{
-			Transform t = groupRoot.transform;
-			var spriteList = t.GetComponentsInChildren<SpriteRenderer>();
-
-			Vector3 min = new Vector3(float.MaxValue, float.MaxValue);
-			Vector3 max = new Vector3(float.MinValue, float.MinValue);
-
-			foreach (var sprite in spriteList)
-			{
-				var bounds = sprite.bounds;
-				min = Vector3.Min(min, bounds.min);
-				max = Vector3.Max(max, bounds.max);
-			}
-
-			Vector2 pivot = GetPivot(alignment);
-			Vector3 pos = Vector3.zero;
-			pos.x = Mathf.Lerp(min.x, max.x, pivot.x);
-			pos.y = Mathf.Lerp(min.y, max.y, pivot.y);
-			return pos;
-		}
-
-		private static Vector3 UiGetGroupPos(GameObject groupRoot, SpriteAlignment alignment)
-		{
-			//return groupRoot.transform.position;
-			Vector2 min = new Vector2(float.MaxValue, float.MaxValue);
-			Vector2 max = new Vector2(float.MinValue, float.MinValue);
-
-			var tList = groupRoot.GetComponentsInChildren<RectTransform>();
-			foreach (var rectTransform in tList)
-			{
-				if (rectTransform.gameObject == groupRoot)
-					continue;
-				
-				var rectSize = rectTransform.sizeDelta;
-				var rectPivot = rectTransform.pivot;
-
-				var calcMin = rectTransform.position;
-				calcMin.x -= rectSize.x*rectPivot.x;
-				calcMin.y -= rectSize.y*rectPivot.y;
-
-				var calcMax = calcMin + new Vector3(rectSize.x, rectSize.y);
-
-				min = Vector2.Min(min, calcMin);
-				max = Vector2.Max(max, calcMax);
-			}
-
-			Vector2 pivot = GetPivot(alignment);
-			Vector3 pos = Vector3.zero;
-			pos.x = Mathf.Lerp(min.x, max.x, pivot.x);
-			pos.y = Mathf.Lerp(min.y, max.y, pivot.y);
-			return pos;
-		}
 	}
 }

@@ -255,9 +255,6 @@ namespace subjectnerdagreement.psdexport
 			Sprite layerSprite = (Sprite)AssetDatabase.LoadAssetAtPath(layerPath, typeof(Sprite));
 			if (layerSprite != null)
 			{
-				string[] pivotNameStrings = Enum.GetNames(typeof(SpriteAlignment));
-				Array pivotNameVals = Enum.GetValues(typeof(SpriteAlignment));
-
 				// Layer import size is stored via tags
 				string[] labels = AssetDatabase.GetLabels(layerSprite);
 				foreach (var label in labels)

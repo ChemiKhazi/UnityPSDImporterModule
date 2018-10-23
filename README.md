@@ -1,6 +1,12 @@
 Unity Psd Importer Submodule
 ==================
 
+## ⛔⚠️ Deprecation Alert ⚠️⛔
+
+This project is considered deprecated and unsupported. Work is moving to the [Psd2Unity importer](https://github.com/ChemiKhazi/Psd2UnityImporter). This repo is being kept for documentation purposes.
+
+** ⛔⚠️ End warning ⛔⚠️ **
+
 This is the submodule for the [Unity Psd Importer](https://github.com/ChemiKhazi/UnityPsdImporter). If you're looking for an easy to install version of the importer, please visit the main project page.
 
 Contributing
